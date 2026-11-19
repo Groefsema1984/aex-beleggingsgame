@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AEX Beleggingsgame">
+<meta name="application-name" content="AEX Beleggingsgame">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#0b1b3a">
+<title>AEX Beleggingsgame</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#f3f5f9; --surface:#ffffff; --surface-2:#f7f8fb; --border:#e3e7ef;
+  --text:#0f172a; --muted:#5b6476; --brand:#0b1b3a; --accent:#2563eb; --accent-soft:#e0eaff;
+  --pos:#0f8a4b; --pos-soft:#dcf5e7; --neg:#c62828; --neg-soft:#fde4e4; --warn:#b45309; --warn-soft:#fef3c7;
+  --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.06);
+  --radius:16px; --tabbar-h:64px;
+  --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0b1220; --surface:#121a2b; --surface-2:#172136; --border:#24304a;
+    --text:#e8edf7; --muted:#9aa6bd; --brand:#0b1b3a; --accent:#5b8cff; --accent-soft:#1b2a4d;
+    --pos:#34d399; --pos-soft:#0f2e22; --neg:#f87171; --neg-soft:#3a1717; --warn:#fbbf24; --warn-soft:#3a2c0a;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}
+body{min-height:100vh;overscroll-behavior-y:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+
+/* ---------- Header ---------- */
+.appbar{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+  padding:calc(var(--safe-top) + 10px) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left))}
+.appbar-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.appbar h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px;flex:1 1 auto;min-width:160px}
+.appbar h1 small{display:block;font-weight:500;font-size:12.5px;opacity:.75}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;white-space:nowrap}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.pill-open{background:#0f8a4b33;color:#6ee7a8}
+.pill-closed{background:#ffffff1f;color:#cbd5e1}
+.pill-live{background:#2563eb40;color:#bcd2ff}
+.pill-sim{background:#b4530940;color:#fcd34d}
+.pill-cache{background:#ffffff1f;color:#e2e8f0}
+.appbar-sub{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:13px;opacity:.9}
+.btn-refresh{min-height:44px;border:1px solid #ffffff40;background:#ffffff14;color:#fff;border-radius:12px;padding:0 14px;font-weight:600;display:inline-flex;align-items:center;gap:8px}
+.btn-refresh:active{background:#ffffff2a}
+.btn-refresh.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- Layout ---------- */
+main{padding:16px max(16px,env(safe-area-inset-right)) calc(var(--tabbar-h) + var(--safe-bottom) + 24px) max(16px,env(safe-area-inset-left));max-width:1200px;margin:0 auto}
+.grid{display:grid;gap:12px}
+.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.two{grid-template-columns:1fr 1fr}
+@media (max-width:820px){.two{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;min-width:0}
+.card h2{font-size:17px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.card h3{font-size:15px;margin:16px 0 8px}
+.section-title{font-size:22px;font-weight:700;margin:4px 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kpi .label{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:4px;min-height:44px}
+.kpi .value{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:-6px}
+.kpi .sub{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.kpi.big{grid-column:span 2;background:linear-gradient(135deg,#0b1b3a,#1e3a8a);color:#fff;border:none}
+.kpi.big .label,.kpi.big .sub{color:#c7d2fe}
+.kpi.big .value{font-size:32px}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+.kpi.big .pos{color:#86efac}.kpi.big .neg{color:#fca5a5}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:14px;font-weight:700}
+.badge.pos{background:var(--pos-soft);color:var(--pos)}
+.badge.neg{background:var(--neg-soft);color:var(--neg)}
+.badge.neutral{background:var(--accent-soft);color:var(--accent)}
+.banner{border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:14px;display:flex;gap:10px;align-items:flex-start}
+.banner.warn{background:var(--warn-soft);color:var(--warn)}
+.banner.info{background:var(--accent-soft);color:var(--accent)}
+.banner.ok{background:var(--pos-soft);color:var(--pos)}
+.banner b{color:inherit}
+.banner .grow{flex:1}
+
+/* info-icoon */
+.i-btn{min-width:44px;min-height:44px;margin:-12px -10px -12px -6px;border:none;background:transparent;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.i-btn span{width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;font-size:12px;font-weight:700;font-style:italic;font-family:Georgia,serif;display:inline-flex;align-items:center;justify-content:center;opacity:.75}
+
+/* tabel */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px;padding:0 16px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12.5px;padding:8px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+td.num,th.num{text-align:right;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.motivation{font-size:13px;color:var(--muted);max-width:340px;min-width:180px}
+
+/* knoppen */
+.btn{min-height:44px;border-radius:12px;border:1px solid var(--border);background:var(--surface);padding:0 16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.buy{background:var(--pos);border-color:var(--pos);color:#fff}
+.btn.sell{background:var(--neg);border-color:var(--neg);color:#fff}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--neg)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.block{width:100%}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap}
+
+/* beurslijst */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.search{flex:1 1 240px;min-height:48px;border-radius:12px;border:1px solid var(--border);background:var(--surface);padding:0 14px;font-size:16px}
+.select{min-height:48px;border-radius:12px;border:1px solid var(--border);background:var(--surface);padding:0 12px;font-size:16px;flex:0 1 260px}
+.stock-list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(400px,1fr))}
+@media (max-width:460px){.stock-list{grid-template-columns:1fr}.stock .btn{padding:0 12px}}
+.stock{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
+.logo{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11.5px;color:#fff;flex:0 0 auto;letter-spacing:.3px}
+.stock .meta{flex:1;min-width:0}
+.stock .name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stock .tick{font-size:12.5px;color:var(--muted)}
+.stock .px{text-align:right;font-variant-numeric:tabular-nums}
+.stock .px .p{font-weight:700}
+.stock .px .c{font-size:13px;font-weight:600}
+.stock .actions{display:flex;flex-direction:column;gap:6px}
+.link-btn{border:none;background:none;padding:0;text-align:left;min-height:44px;display:block;width:100%}
+.chip{display:inline-block;white-space:nowrap;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);margin-top:2px}
+.held{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+
+/* tabbar */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--border);
+  padding:6px max(8px,env(safe-area-inset-right)) calc(6px + var(--safe-bottom)) max(8px,env(safe-area-inset-left));display:flex;justify-content:center}
+.tabbar-inner{display:flex;width:100%;max-width:820px}
+.tab{flex:1;min-height:52px;border:none;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11.5px;font-weight:600;color:var(--muted);border-radius:12px}
+.tab svg{width:24px;height:24px}
+.tab.active{color:var(--accent);background:var(--accent-soft)}
+
+/* modals */
+.overlay{position:fixed;inset:0;z-index:50;background:rgba(2,6,23,.55);display:flex;align-items:flex-end;justify-content:center;padding:0}
+@media (min-width:700px){.overlay{align-items:center;padding:24px}}
+.modal{background:var(--surface);width:100%;max-width:620px;max-height:92vh;overflow:auto;-webkit-overflow-scrolling:touch;border-radius:20px 20px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));box-shadow:0 20px 50px rgba(0,0,0,.3)}
+@media (min-width:700px){.modal{border-radius:20px}}
+.modal.wide{max-width:900px}
+.modal-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+.modal-head h2{margin:0;font-size:20px;flex:1}
+.close-x{width:44px;height:44px;border-radius:50%;border:none;background:var(--surface-2);font-size:22px;line-height:1;flex:0 0 auto}
+.seg{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px}
+.seg button{flex:1;min-height:44px;border:none;border-radius:9px;background:transparent;font-weight:700}
+.seg button.on-buy{background:var(--pos);color:#fff}
+.seg button.on-sell{background:var(--neg);color:#fff}
+.qty{display:flex;align-items:center;gap:8px}
+.qty button{width:52px;height:52px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);font-size:24px;font-weight:700}
+.qty input{flex:1;min-width:0;height:52px;border-radius:12px;border:1px solid var(--border);background:var(--surface);text-align:center;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.calc{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin:14px 0;font-variant-numeric:tabular-nums}
+.calc .row{display:flex;justify-content:space-between;gap:10px;padding:5px 0}
+.calc .row.total{border-top:1px solid var(--border);margin-top:6px;padding-top:10px;font-weight:800;font-size:17px}
+textarea{width:100%;min-height:96px;border-radius:12px;border:1px solid var(--border);background:var(--surface);padding:12px;font-size:16px;resize:vertical}
+label.f{display:block;font-weight:600;font-size:14px;margin:12px 0 6px}
+input.f{width:100%;min-height:48px;border-radius:12px;border:1px solid var(--border);background:var(--surface);padding:0 14px;font-size:16px}
+.err{color:var(--neg);font-size:13.5px;margin-top:6px;min-height:18px}
+.hint{color:var(--muted);font-size:13px;margin-top:4px}
+.counter{font-size:12.5px;color:var(--muted);text-align:right;margin-top:4px}
+.company-block{margin:12px 0}
+.company-block h4{margin:0 0 4px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.company-block p{margin:0}
+.company-card{cursor:pointer}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 18px);z-index:60;background:#0f172a;color:#fff;border-radius:14px;padding:12px 18px;font-weight:600;font-size:14.5px;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:calc(100% - 32px);text-align:center}
+.chart-box{position:relative;height:300px}
+.pie-box{position:relative;height:260px}
+.progress{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--border)}
+.progress > div{height:100%;background:linear-gradient(90deg,#2563eb,#22c55e)}
+.empty{text-align:center;color:var(--muted);padding:24px 8px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px}
+.kv div:nth-child(odd){color:var(--muted)}
+.kv div:nth-child(even){font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+
+/* rapport */
+.report h1{font-size:22px;margin:0 0 4px}
+.report h3{margin:18px 0 6px;font-size:16px}
+.report table{font-size:13px}
+.report .chart-img{width:100%;border:1px solid var(--border);border-radius:12px;margin-top:8px}
+
+@media print{
+  body *{visibility:hidden}
+  #printArea,#printArea *{visibility:visible}
+  #printArea{position:absolute;left:0;top:0;width:100%;padding:0;background:#fff;color:#000}
+  .no-print{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar-row">
+    <h1>AEX Beleggingsgame<small id="hdrPlayer">&nbsp;</small></h1>
+    <span id="marketPill" class="pill pill-closed"><span class="dot"></span><span>Beurs …</span></span>
+    <span id="dataPill" class="pill pill-sim"><span class="dot"></span><span>Simulatiemodus</span></span>
+  </div>
+  <div class="appbar-sub">
+    <span id="dayLabel"></span>
+    <span>·</span>
+    <span id="lastUpdate">Nog geen koersen</span>
+    <span style="flex:1"></span>
+    <button id="refreshBtn" class="btn-refresh" aria-label="Koersen verversen">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      Koersen verversen
+    </button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<nav class="tabbar">
+  <div class="tabbar-inner" id="tabbar">
+    <button class="tab active" data-tab="portfolio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>Portefeuille</button>
+    <button class="tab" data-tab="market">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l5-5 5 5"/><path d="M7 11l5-5 5 5"/></svg>AEX-beurs</button>
+    <button class="tab" data-tab="companies">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 0 1 2-2h8l6 6v12"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h6"/></svg>Bedrijven</button>
+    <button class="tab" data-tab="transactions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>Transacties</button>
+    <button class="tab" data-tab="export">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>Inleveren</button>
+  </div>
+</nav>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<input type="file" id="importFile" accept=".json,application/json" class="hidden">
+
+<script>
+/* =====================================================================
+   CONFIGURATIE  –  pas hier alles aan wat je als docent wilt wijzigen
+   ===================================================================== */
+
+// URL van je Google Apps Script web-app (zie stappenplan). Leeg = simulatiemodus.
+const DATA_ENDPOINT_URL = "";
+
+// true  = buiten beurstijd worden orders "lopend" en pas bij opening uitgevoerd
+// false = buiten beurstijd direct uitgevoerd tegen de laatste slotkoers
+const STRICT_EURONEXT_HOURS = true;
+
+const START_CAPITAL      = 10000.00;  // startkapitaal in euro
+const COST_FIXED         = 2.00;      // vaste transactiekosten per order (€)
+const COST_PERCENT       = 0.10;      // variabele kosten in % van de orderwaarde
+const GAME_DAYS          = 30;        // lengte van de PO in kalenderdagen
+const MIN_MOTIVATION     = 10;        // minimaal aantal tekens motivatie
+const REFRESH_INTERVAL_MIN = 60;      // automatisch verversen (minuten)
+const PENDING_RESERVE_BUFFER = 0.05;  // extra cash geblokkeerd bij lopende kooporders (koers kan stijgen)
+const PENDING_EXEC_DELAY_MIN = 20;    // lopende orders pas X min na opening uitvoeren (gratis koersen lopen ~15-20 min achter)
+
+// Optioneel: vaste startdatum voor de hele klas (bijv. "2026-11-23"). null = dag van onboarding.
+const FIXED_START_DATE = null;
+
+// Index die als benchmark dient
+const AEX_INDEX = { ticker: "^AEX", gf: "INDEXEURO:AEX", name: "AEX-index", sim: 950 };
+
+// Alle fondsen in de AEX (stand 30-09-2026, bron: Euronext). Aanpasbaar bij een indexherziening.
+// ticker = Euronext/Yahoo-notatie, gf = Google Finance-code (voor het Apps Script), sim = startkoers simulatie
+const AEX_STOCKS = [
+  { ticker:"AALB.AS",  gf:"AMS:AALB",  name:"Aalberts",             sector:"Industrie",                  sim:30,   color:"#475569" },
+  { ticker:"ABN.AS",   gf:"AMS:ABN",   name:"ABN AMRO",             sector:"Financiële dienstverlening", sim:27,   color:"#0f766e" },
+  { ticker:"ADYEN.AS", gf:"AMS:ADYEN", name:"Adyen",                sector:"Technologie",                sim:1450, color:"#0abf53" },
+  { ticker:"AGN.AS",   gf:"AMS:AGN",   name:"Aegon",                sector:"Financiële dienstverlening", sim:6.8,  color:"#1d4ed8" },
+  { ticker:"AD.AS",    gf:"AMS:AD",    name:"Ahold Delhaize",       sector:"Consumentengoederen",        sim:35,   color:"#00a0e2" },
+  { ticker:"AKZA.AS",  gf:"AMS:AKZA",  name:"AkzoNobel",            sector:"Grondstoffen & chemie",      sim:58,   color:"#1e3a8a" },
+  { ticker:"MT.AS",    gf:"AMS:MT",    name:"ArcelorMittal",        sector:"Grondstoffen & chemie",      sim:33,   color:"#e4572e" },
+  { ticker:"ASM.AS",   gf:"AMS:ASM",   name:"ASM International",    sector:"Technologie",                sim:520,  color:"#be123c" },
+  { ticker:"ASML.AS",  gf:"AMS:ASML",  name:"ASML",                 sector:"Technologie",                sim:950,  color:"#10069f" },
+  { ticker:"ASRNL.AS", gf:"AMS:ASRNL", name:"a.s.r.",               sector:"Financiële dienstverlening", sim:58,   color:"#7c3aed" },
+  { ticker:"BESI.AS",  gf:"AMS:BESI",  name:"BE Semiconductor (Besi)", sector:"Technologie",             sim:130,  color:"#0369a1" },
+  { ticker:"CVC.AS",   gf:"AMS:CVC",   name:"CVC Capital Partners", sector:"Financiële dienstverlening", sim:17,   color:"#334155" },
+  { ticker:"DSFIR.AS", gf:"AMS:DSFIR", name:"DSM-Firmenich",        sector:"Consumentengoederen",        sim:75,   color:"#0e7490" },
+  { ticker:"EXO.AS",   gf:"AMS:EXO",   name:"Exor",                 sector:"Financiële dienstverlening", sim:85,   color:"#1f2937" },
+  { ticker:"HEIA.AS",  gf:"AMS:HEIA",  name:"Heineken",             sector:"Consumentengoederen",        sim:70,   color:"#15803d" },
+  { ticker:"IMCD.AS",  gf:"AMS:IMCD",  name:"IMCD",                 sector:"Grondstoffen & chemie",      sim:85,   color:"#0891b2" },
+  { ticker:"INGA.AS",  gf:"AMS:INGA",  name:"ING Groep",            sector:"Financiële dienstverlening", sim:22,   color:"#ff6200" },
+  { ticker:"KPN.AS",   gf:"AMS:KPN",   name:"KPN",                  sector:"Telecom",                    sim:4.1,  color:"#009900" },
+  { ticker:"MICC.AS",  gf:"AMS:MICC",  name:"The Magnum Ice Cream Company", sector:"Consumentengoederen", sim:15,  color:"#7c2d12" },
+  { ticker:"NN.AS",    gf:"AMS:NN",    name:"NN Group",             sector:"Financiële dienstverlening", sim:60,   color:"#ea580c" },
+  { ticker:"PHIA.AS",  gf:"AMS:PHIA",  name:"Philips",              sector:"Gezondheidszorg",            sim:23,   color:"#0b5ed7" },
+  { ticker:"PRX.AS",   gf:"AMS:PRX",   name:"Prosus",               sector:"Technologie",                sim:55,   color:"#2563eb" },
+  { ticker:"REN.AS",   gf:"AMS:REN",   name:"RELX",                 sector:"Zakelijke informatie",       sim:38,   color:"#f97316" },
+  { ticker:"SBMO.AS",  gf:"AMS:SBMO",  name:"SBM Offshore",         sector:"Energie",                    sim:22,   color:"#0c4a6e" },
+  { ticker:"SHELL.AS", gf:"AMS:SHELL", name:"Shell",                sector:"Energie",                    sim:31,   color:"#d4a106" },
+  { ticker:"UMG.AS",   gf:"AMS:UMG",   name:"Universal Music Group",sector:"Media & entertainment",      sim:23,   color:"#111827" },
+  { ticker:"UNA.AS",   gf:"AMS:UNA",   name:"Unilever",             sector:"Consumentengoederen",        sim:52,   color:"#1f36c7" },
+  { ticker:"WDP.AS",   gf:"AMS:WDP",   name:"WDP (Warehouses De Pauw)", sector:"Vastgoed",               sim:22,   color:"#b91c1c" },
+  { ticker:"WKL.AS",   gf:"AMS:WKL",   name:"Wolters Kluwer",       sector:"Zakelijke informatie",       sim:110,  color:"#0e7c86" }
+];
+
+/* Bedrijfsinformatie voor leerlingen (in-app "Bedrijven"-tab) */
+const COMPANY_INFO = {
+  "AALB.AS": { what:"Aalberts is een Nederlands technologiebedrijf uit Utrecht dat onderdelen en systemen maakt voor gebouwen en fabrieken: leidingsystemen voor water en verwarming, kleppen en speciale oppervlaktebehandelingen voor metaal.",
+    products:"Pers-fittingen voor water- en cv-leidingen, vloerverwarmingssystemen, precisieonderdelen voor de chipindustrie, coatings en warmtebehandeling van metalen onderdelen.",
+    why:"Aalberts verdient vooral aan de bouw en de industrie. Gaat het goed met de bouw van woningen, kantoren en fabrieken (en met verduurzaming, zoals warmtepompen), dan profiteert Aalberts.",
+    watch:"Gevoelig voor de economie: in een recessie wordt er minder gebouwd. Let op nieuws over de woningbouw, rente en de chipsector." },
+  "ABN.AS": { what:"ABN AMRO is een van de drie grote banken van Nederland, met het hoofdkantoor in Amsterdam. De Nederlandse staat is (nog) grootaandeelhouder.",
+    products:"Betaalrekeningen, spaarrekeningen, hypotheken, zakelijke leningen en vermogensbeheer voor rijke klanten (private banking).",
+    why:"Een bank verdient vooral aan het verschil tussen de rente die ze ontvangt op leningen en de rente die ze betaalt op spaargeld. Banken zijn dus erg gevoelig voor de rentestand.",
+    watch:"Let op besluiten van de Europese Centrale Bank (ECB) over de rente, de huizenmarkt en het verkopen van aandelen door de Staat." },
+  "ADYEN.AS": { what:"Adyen is een Nederlands betaalbedrijf (fintech) uit Amsterdam. Als je online of in een winkel met je pinpas, creditcard of telefoon betaalt, regelt Adyen vaak op de achtergrond dat het geld bij de winkel komt.",
+    products:"Betaalplatform voor webshops, apps en winkels. Klanten zijn grote merken zoals streamingdiensten, taxi-apps en kledingmerken over de hele wereld.",
+    why:"Adyen verdient een klein bedrag per betaling. Hoe meer er wereldwijd (online) wordt betaald via Adyen, hoe meer omzet. Het is een groeibedrijf met een hoge waardering.",
+    watch:"De koers kan flink schommelen bij kwartaalcijfers. Concurrentie (bijv. Stripe, PayPal) en de groei van het betaalvolume zijn belangrijk." },
+  "AGN.AS": { what:"Aegon is een verzekeraar en pensioenaanbieder die ooit in Den Haag begon. Tegenwoordig doet Aegon vooral zaken in de Verenigde Staten (Transamerica), het Verenigd Koninkrijk en Azië.",
+    products:"Levensverzekeringen, pensioenproducten en beleggingsfondsen.",
+    why:"Verzekeraars beleggen de premies van klanten. Daardoor zijn ze gevoelig voor de rente en de beurzen. Aegon is een zogenaamd 'goedkoop' aandeel met een lage koers per stuk.",
+    watch:"Let op de dollar (veel winst in de VS) en plannen om het hoofdkantoor naar de VS te verplaatsen." },
+  "AD.AS": { what:"Ahold Delhaize is een van de grootste supermarktconcerns ter wereld, met winkels in Europa en vooral in de Verenigde Staten.",
+    products:"Albert Heijn, Etos, Gall & Gall en bol (webwinkel) in Nederland, Delhaize in België en ketens als Food Lion en Stop & Shop in de VS.",
+    why:"Mensen blijven altijd boodschappen doen, ook als het economisch slecht gaat. Daarom heet dit een 'defensief' aandeel: meestal minder schommelingen.",
+    watch:"De marges in supermarkten zijn klein (een paar procent). Let op de concurrentie, prijsoorlogen, de dollarkoers en de groei van bol." },
+  "AKZA.AS": { what:"AkzoNobel uit Amsterdam is een van de grootste verfmakers ter wereld.",
+    products:"Verfmerken als Flexa, Sikkens en Dulux, en coatings voor schepen, vliegtuigen, auto's en metaal.",
+    why:"Verf wordt gebruikt bij bouwen, verbouwen en in de industrie. AkzoNobel werkt aan een fusie met het Amerikaanse Axalta, wat het bedrijf flink kan veranderen.",
+    watch:"Let op grondstofprijzen (olie), de bouwmarkt en nieuws over de fusie." },
+  "MT.AS": { what:"ArcelorMittal is het op één na grootste staalbedrijf ter wereld, met fabrieken in Europa, Amerika en India.",
+    products:"Staal voor auto's, gebouwen, bruggen, verpakkingen en huishoudelijke apparaten; ook ijzererts-mijnen.",
+    why:"Staal is nodig in bijna alle industrieën. Het is een echt 'cyclisch' aandeel: gaat het goed met de wereldeconomie, dan stijgt de vraag naar staal en meestal ook de koers.",
+    watch:"Schommelt sterk mee met de economie, de staalprijs, importheffingen en de vraag uit China. Ook de kosten van CO2-uitstoot zijn belangrijk." },
+  "ASM.AS": { what:"ASM International uit Almere maakt machines die superdunne laagjes (soms maar een paar atomen dik) op chips aanbrengen.",
+    products:"ALD- en epitaxie-machines: apparaten om materiaallaagjes laag voor laag op siliciumwafers te leggen.",
+    why:"Hoe kleiner en slimmer chips worden (bijv. voor AI), hoe belangrijker deze techniek. ASM is wereldmarktleider in ALD.",
+    watch:"Chipbedrijven investeren in golven. Let op AI-investeringen, exportbeperkingen naar China en de kwartaalcijfers." },
+  "ASML.AS": { what:"ASML uit Veldhoven is het grootste bedrijf van de AEX. Het maakt de machines waarmee chipfabrikanten zoals TSMC, Samsung en Intel computerchips maken.",
+    products:"Lithografiemachines die met licht patronen op chips 'printen'. De nieuwste EUV-machines kosten honderden miljoenen euro's per stuk en alleen ASML kan ze maken.",
+    why:"Zonder ASML geen moderne smartphones, laptops of AI-servers. ASML heeft een unieke positie (bijna een monopolie) en weegt heel zwaar in de AEX: als ASML beweegt, beweegt de hele index mee.",
+    watch:"Let op exportregels naar China, de vraag naar AI-chips en het orderboek dat ASML elk kwartaal bekendmaakt." },
+  "ASRNL.AS": { what:"a.s.r. uit Utrecht is een grote Nederlandse verzekeraar. Het bedrijf nam een paar jaar geleden Aegon Nederland over.",
+    products:"Schadeverzekeringen (auto, woonhuis), arbeidsongeschiktheids- en zorgverzekeringen (o.a. Ditzo), pensioenen en vastgoedbeleggingen.",
+    why:"a.s.r. is een stabiele verzekeraar die bekend staat om een relatief hoog dividend (uitkering van winst aan aandeelhouders).",
+    watch:"Let op schadeclaims (bijv. na stormen), de rente en de pensioenhervorming in Nederland." },
+  "BESI.AS": { what:"BE Semiconductor Industries (Besi) uit Duiven maakt machines die chips 'verpakken' en met elkaar verbinden.",
+    products:"Machines voor het monteren van chips, waaronder 'hybrid bonding': een techniek om chips direct op elkaar te stapelen, belangrijk voor AI-chips.",
+    why:"Omdat AI-chips steeds vaker uit gestapelde chips bestaan, wordt de techniek van Besi belangrijker. Het aandeel kan daardoor snel stijgen, maar ook hard dalen.",
+    watch:"Behoorlijk beweeglijk (volatiel) aandeel. Let op nieuws over hybrid bonding, AI-investeringen en overnamegeruchten." },
+  "CVC.AS": { what:"CVC Capital Partners is een van de grootste private-equitybedrijven van Europa. Het haalt geld op bij beleggers (zoals pensioenfondsen) en koopt daarmee bedrijven om ze te verbeteren en later met winst te verkopen.",
+    products:"Beleggingsfondsen die belangen hebben in bedrijven en sport, zoals belangen in rugby- en voetbalcompetities.",
+    why:"CVC verdient beheervergoedingen en een deel van de winst als het bedrijven verkoopt. Gaat de beurs goed, dan gaat het meestal ook goed met CVC.",
+    watch:"Gevoelig voor de rente (goedkoop lenen helpt overnames) en voor de stemming op de financiële markten." },
+  "DSFIR.AS": { what:"DSM-Firmenich (gevestigd in Zwitserland en Nederland) ontstond uit een fusie van het Nederlandse DSM en het Zwitserse Firmenich.",
+    products:"Vitamines en voedingsstoffen, geuren voor parfums en wasmiddelen, smaakstoffen voor voeding en drankjes, en ingrediënten voor diervoeding.",
+    why:"Veel producten in de supermarkt en drogist bevatten ingrediënten van DSM-Firmenich, ook al zie je de naam nergens. Het is een 'business-to-business' bedrijf.",
+    watch:"Let op de verkoop van onderdelen (zoals diervoeding) en de vitamineprijzen." },
+  "EXO.AS": { what:"Exor is de investeringsmaatschappij van de Italiaanse familie Agnelli, met hoofdkantoor in Amsterdam. Exor bezit grote belangen in bekende bedrijven.",
+    products:"Belangen in onder andere Ferrari, Stellantis (Fiat, Peugeot, Jeep), Philips, voetbalclub Juventus en het tijdschrift The Economist.",
+    why:"Met één aandeel Exor heb je eigenlijk een klein stukje van een hele verzameling bedrijven. Exor noteert vaak onder de waarde van alle belangen samen (een 'korting').",
+    watch:"De koers hangt sterk af van Ferrari en Stellantis. Let op autoverkopen en nieuwe investeringen van Exor." },
+  "HEIA.AS": { what:"Heineken uit Amsterdam is de op één na grootste brouwer ter wereld en verkoopt bier in bijna elk land.",
+    products:"Heineken, Amstel, Brand, Desperados, Affligem, Birra Moretti en alcoholvrije varianten zoals Heineken 0.0.",
+    why:"Een bekend merkenbedrijf met een wereldwijd netwerk. Groei komt vooral uit Afrika, Azië en Latijns-Amerika.",
+    watch:"Let op ingrediënt- en energieprijzen, valuta's in opkomende landen en het dalende alcoholgebruik in Europa." },
+  "IMCD.AS": { what:"IMCD uit Rotterdam is een groothandel in speciale chemicaliën en ingrediënten. Het koopt bij grote fabrikanten in en verkoopt aan duizenden kleinere klanten.",
+    products:"Ingrediënten voor cosmetica, medicijnen, voeding, verf en plastics, plus technisch advies bij het gebruik ervan.",
+    why:"IMCD groeit door veel kleinere bedrijven over te nemen. Het is een 'tussenpersoon' die zelf geen fabrieken heeft.",
+    watch:"Gevoelig voor de vraag uit de industrie. Let op de omzetgroei en nieuwe overnames." },
+  "INGA.AS": { what:"ING is de grootste bank van Nederland, met klanten in heel Europa en daarbuiten.",
+    products:"Betaalrekeningen, sparen, hypotheken, beleggen, de ING-app en leningen aan grote bedrijven.",
+    why:"Net als andere banken verdient ING veel aan rente. ING keert vaak veel geld terug aan aandeelhouders via dividend en het inkopen van eigen aandelen.",
+    watch:"Let op de rente van de ECB, de economie in Europa en kwartaalcijfers." },
+  "KPN.AS": { what:"KPN is het grootste telecombedrijf van Nederland, ooit ontstaan uit de staats-PTT.",
+    products:"Mobiele abonnementen, glasvezel-internet, tv en zakelijke ICT. Merken: KPN, Simyo en Simpel.",
+    why:"Mensen zeggen hun internet en telefoon niet snel op, dus de inkomsten zijn stabiel. KPN is daarom een defensief dividendaandeel.",
+    watch:"Let op investeringen in glasvezel, concurrentie (Odido, VodafoneZiggo) en de rente (KPN heeft schulden)." },
+  "MICC.AS": { what:"The Magnum Ice Cream Company is het grootste ijsjesbedrijf ter wereld. Het werd in 2025 afgesplitst van Unilever en kreeg een eigen beursnotering in Amsterdam.",
+    products:"Magnum, Ben & Jerry's, Ola, Cornetto, Viennetta en Hertog.",
+    why:"Een nieuw beursbedrijf met bekende merken. Interessant om te volgen hoe een bedrijf het zelfstandig doet na een afsplitsing.",
+    watch:"IJsverkoop is seizoensgebonden (zomer!) en afhankelijk van het weer. Let op melk-, cacao- en suikerprijzen." },
+  "NN.AS": { what:"NN Group (voorheen Nationale-Nederlanden) is een grote verzekeraar uit Den Haag.",
+    products:"Levensverzekeringen, pensioenen, schadeverzekeringen (auto, wonen) en hypotheken.",
+    why:"Een stabiel bedrijf dat bekend staat om zijn dividend. Verzekeraars beleggen veel premiegeld, dus beurs en rente zijn belangrijk.",
+    watch:"Let op de Nederlandse pensioenwet, rechtszaken over beleggingsverzekeringen en de rente." },
+  "PHIA.AS": { what:"Philips uit Amsterdam was vroeger bekend van lampen en televisies, maar is nu een zorgtechnologiebedrijf.",
+    products:"Scanners en monitoren voor ziekenhuizen, slaap- en ademhalingsapparatuur, en consumentenproducten zoals Sonicare-tandenborstels en Philips-scheerapparaten.",
+    why:"De vergrijzing zorgt voor meer vraag naar zorg. Philips probeert te herstellen na een grote terugroepactie van slaapapparaten.",
+    watch:"Let op rechtszaken, importheffingen in de VS en verkoop in China." },
+  "PRX.AS": { what:"Prosus is een investeringsbedrijf uit Amsterdam (onderdeel van het Zuid-Afrikaanse Naspers) dat in internetbedrijven belegt.",
+    products:"Groot belang in het Chinese techbedrijf Tencent (WeChat, games), plus o.a. Just Eat Takeaway (Thuisbezorgd), OLX en iFood.",
+    why:"De koers hangt sterk af van Tencent. Prosus koopt elke dag eigen aandelen in om de 'korting' op de waarde van zijn bezittingen te verkleinen.",
+    watch:"Let op Chinese techregels, de koers van Tencent en nieuwe overnames." },
+  "REN.AS": { what:"RELX (Brits-Nederlands, vroeger Reed Elsevier) verkoopt informatie, data en analyse-tools aan wetenschappers, artsen, juristen en bedrijven.",
+    products:"Wetenschappelijke tijdschriften (o.a. The Lancet), databanken voor advocaten, risico- en fraudedetectie voor banken en verzekeraars, en beurzen/events.",
+    why:"Klanten hebben vaak een abonnement, wat stabiele inkomsten geeft. RELX gebruikt steeds meer AI in zijn producten.",
+    watch:"Let op de vraag of AI de producten van RELX sterker maakt of juist vervangt." },
+  "SBMO.AS": { what:"SBM Offshore uit Amsterdam ontwerpt, bouwt en verhuurt drijvende productieschepen voor olie en gas op zee (FPSO's).",
+    products:"FPSO's: enorme schepen die olie en gas uit de zeebodem oppompen, verwerken en opslaan, vooral voor de kust van Brazilië en Guyana. Ook projecten met drijvende windmolens.",
+    why:"SBM heeft langlopende contracten die voor veel jaren inkomsten zorgen. Het bedrijf kwam in 2026 terug in de AEX.",
+    watch:"Afhankelijk van investeringen door oliebedrijven en de olieprijs. Let op nieuwe opdrachten." },
+  "SHELL.AS": { what:"Shell is een van de grootste energiebedrijven ter wereld. Het hoofdkantoor verhuisde in 2022 van Den Haag naar Londen.",
+    products:"Olie- en gaswinning, LNG (vloeibaar aardgas), raffinaderijen, tankstations, laadpalen en chemie.",
+    why:"Shell weegt heel zwaar in de AEX. De winst gaat sterk op en neer met de olie- en gasprijs. Shell keert veel geld uit aan aandeelhouders.",
+    watch:"Let op de olieprijs, geopolitieke spanningen en de energietransitie (klimaatbeleid)." },
+  "UMG.AS": { what:"Universal Music Group is het grootste muzieklabel ter wereld, met beursnotering in Amsterdam.",
+    products:"Muziekrechten van artiesten als Taylor Swift, Billie Eilish, The Weeknd, Drake en The Beatles, plus muziekuitgeverij.",
+    why:"UMG verdient aan elke keer dat je muziek streamt via Spotify, Apple Music of YouTube. Meer betaalde streaming-abonnementen betekent meer inkomsten.",
+    watch:"Let op prijsverhogingen van streamingdiensten, AI-muziek en contracten met platforms als TikTok." },
+  "UNA.AS": { what:"Unilever is een Brits bedrijf met Nederlandse wortels (Rotterdam) dat consumentenproducten maakt die dagelijks door miljarden mensen worden gebruikt.",
+    products:"Dove, Axe/Lynx, Rexona, Knorr, Hellmann's, Unox, Calvé, Robijn en Omo. (De ijsmerken zitten sinds 2025 in The Magnum Ice Cream Company.)",
+    why:"Een defensief aandeel: zeep, shampoo en mayonaise koop je ook als de economie tegenzit. Unilever is een van de zwaarste fondsen in de AEX.",
+    watch:"Let op grondstofprijzen, concurrentie van goedkopere huismerken en de groei in opkomende landen." },
+  "WDP.AS": { what:"WDP (Warehouses De Pauw) is een Belgisch vastgoedbedrijf dat grote magazijnen en distributiecentra bouwt en verhuurt in België, Nederland en Roemenië.",
+    products:"Logistiek vastgoed: magazijnen voor webwinkels, supermarkten, transportbedrijven en de industrie.",
+    why:"Door online winkelen is er veel vraag naar magazijnen. WDP krijgt maandelijks huur, wat stabiele inkomsten en dividend oplevert.",
+    watch:"Vastgoedaandelen zijn gevoelig voor de rente: stijgt de rente, dan daalt vaak de koers." },
+  "WKL.AS": { what:"Wolters Kluwer uit Alphen aan den Rijn levert software en informatie aan professionals zoals artsen, verpleegkundigen, accountants en juristen.",
+    products:"UpToDate (medische kennisbank voor artsen), belasting- en boekhoudsoftware, juridische databanken en compliance-software.",
+    why:"Bijna alle inkomsten komen uit abonnementen en software, wat zorgt voor stabiele groei. Het bedrijf zet steeds meer AI in.",
+    watch:"Let op de concurrentie van AI-tools en de groei van de digitale producten." }
+};
+
+/* Uitleg bij de i-icoontjes */
+const INFO_TIPS = {
+  gak: { title:"Gemiddelde aankoopkoers (GAK)", text:"De gemiddelde prijs die je per aandeel hebt betaald. Koop je 10 aandelen voor € 20 en later 10 voor € 30, dan is je GAK € 25. Je vergelijkt de actuele koers met je GAK om te zien of je op een aandeel winst of verlies staat. (In deze game tellen de transactiekosten niet mee in de GAK; die zie je apart.)" },
+  realized: { title:"Gerealiseerd vs. ongerealiseerd rendement", text:"Ongerealiseerd = winst of verlies 'op papier' op aandelen die je nog hebt: (actuele koers − GAK) × aantal. Het kan nog alle kanten op. Gerealiseerd = winst of verlies dat vastligt omdat je aandelen hebt verkocht: (verkoopkoers − GAK) × aantal." },
+  costs: { title:"Transactiekosten", text:"Elke keer dat je koopt of verkoopt, betaal je de broker kosten: hier € " + COST_FIXED.toFixed(2).replace('.',',') + " vast + " + String(COST_PERCENT).replace('.',',') + "% van de orderwaarde. Veel kleine transacties zijn dus duur: bij een order van € 100 betaal je al ruim 2% kosten. Kosten gaan direct van je rendement af." },
+  sector: { title:"Sectorspreiding", text:"Spreiden betekent je geld verdelen over verschillende bedrijven en sectoren (zoals technologie, banken, energie). Als één sector het slecht doet, word je dan niet meteen hard geraakt. 'Niet al je eieren in één mand' is een gouden regel bij beleggen." },
+  benchmark: { title:"AEX-benchmark", text:"Een benchmark is een maatstaf om je resultaat mee te vergelijken. Hier: wat zou je € " + START_CAPITAL.toLocaleString('nl-NL') + " waard zijn als je op dag 1 alles in de AEX-index had gestopt? Doe je het beter dan de AEX, dan 'versla je de markt'. Het verschil zie je in procentpunten (pp)." },
+  dayresult: { title:"Dagresultaat", text:"Hoeveel je portefeuille vandaag in waarde is gestegen of gedaald ten opzichte van de laatste stand van de vorige dag." },
+  pending: { title:"Lopende order", text:"Een order die je hebt ingelegd terwijl de beurs dicht was. Hij wordt automatisch uitgevoerd tegen de nieuwe koers zodra Euronext Amsterdam weer open is. Tot dan kun je hem annuleren. Bij een kooporder wordt het geld (plus een kleine buffer) alvast geblokkeerd." },
+  total: { title:"Totaal rendement", text:"Het verschil tussen de huidige waarde van je portefeuille (cash + aandelen) en je startkapitaal van € " + START_CAPITAL.toLocaleString('nl-NL') + ". In procenten: (waarde − start) ÷ start × 100%." },
+  delay: { title:"Hoe 'live' zijn de koersen?", text:"Gratis koersen (zoals van Google Finance) lopen tot ongeveer 15–20 minuten achter op de echte beurs. Echte realtime koersen van Euronext zijn alleen betaald beschikbaar. Voor deze opdracht maakt dat weinig uit: iedereen handelt tegen dezelfde koersen." }
+};
+
+/* =====================================================================
+   HULPFUNCTIES
+   ===================================================================== */
+const STORAGE_KEY = "aexBeleggingsgame_v1";
+const $ = (s, el=document) => el.querySelector(s);
+const eurFmt = new Intl.NumberFormat('nl-NL', { style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2 });
+const fmtEUR = n => eurFmt.format(isFinite(n) ? n : 0);
+const fmtNum = (n, d=2) => new Intl.NumberFormat('nl-NL', { minimumFractionDigits:d, maximumFractionDigits:d }).format(isFinite(n) ? n : 0);
+const fmtPct = (n, d=2) => (n > 0 ? '+' : '') + fmtNum(n, d) + '%';
+const fmtSignedEUR = n => (n > 0 ? '+' : '') + fmtEUR(n);
+const cls = n => n > 0.000001 ? 'pos' : (n < -0.000001 ? 'neg' : '');
+const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const stockBy = t => AEX_STOCKS.find(s => s.ticker === t);
+const uid = () => { const a = new Uint8Array(8); (crypto||window.msCrypto).getRandomValues(a); return Array.from(a, b => b.toString(36).padStart(2,'0')).join('').slice(0,12); };
+const costFor = value => round2(COST_FIXED + value * COST_PERCENT / 100);
+function infoBtn(key){ return `<button class="i-btn" data-info="${key}" aria-label="Uitleg"><span>i</span></button>`; }
+
+/* ---------- Tijd in Amsterdam ---------- */
+const amsFmt = new Intl.DateTimeFormat('en-GB', { timeZone:'Europe/Amsterdam', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', weekday:'short', hour12:false });
+function ams(d = new Date()){
+  const p = {}; amsFmt.formatToParts(d).forEach(x => p[x.type] = x.value);
+  const dowMap = { Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6, Sun:0 };
+  const hh = +p.hour % 24;
+  return { y:+p.year, m:+p.month, d:+p.day, hh, mm:+p.minute, dow:dowMap[p.weekday], key:`${p.year}-${p.month}-${p.day}`, min: hh*60 + (+p.minute) };
+}
+const fmtDateTime = ts => new Date(ts).toLocaleString('nl-NL', { timeZone:'Europe/Amsterdam', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+const fmtDate = ts => new Date(ts).toLocaleDateString('nl-NL', { timeZone:'Europe/Amsterdam', day:'2-digit', month:'2-digit', year:'numeric' });
+const fmtKey = key => { const [y,m,d] = key.split('-'); return `${d}-${m}-${y}`; };
+function daysBetweenKeys(a, b){ const pa = a.split('-').map(Number), pb = b.split('-').map(Number); return Math.round((Date.UTC(pb[0],pb[1]-1,pb[2]) - Date.UTC(pa[0],pa[1]-1,pa[2])) / 86400000); }
+function addDaysKey(key, n){ const [y,m,d] = key.split('-').map(Number); const dt = new Date(Date.UTC(y,m-1,d+n)); return dt.toISOString().slice(0,10); }
+
+/* ---------- Euronext-handelskalender ---------- */
+function easter(y){ const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1; return `${y}-${String(mo).padStart(2,'0')}-${String(da).padStart(2,'0')}`; }
+function holidays(y){ const e = easter(y); return new Set([`${y}-01-01`, addDaysKey(e,-2), addDaysKey(e,1), `${y}-05-01`, `${y}-12-25`, `${y}-12-26`]); }
+function isTradingDay(key){ const [y,m,d] = key.split('-').map(Number); const dow = new Date(Date.UTC(y,m-1,d)).getUTCDay(); return dow>=1 && dow<=5 && !holidays(y).has(key); }
+function closeMinute(key){ return (key.endsWith('-12-24') || key.endsWith('-12-31')) ? 14*60+5 : 17*60+30; }
+const OPEN_MIN = 9*60;
+function marketState(now = new Date()){
+  const a = ams(now);
+  const trading = isTradingDay(a.key);
+  const close = closeMinute(a.key);
+  const open = trading && a.min >= OPEN_MIN && a.min < close;
+  let next = null;
+  if (!open){
+    let k = a.key;
+    if (trading && a.min < OPEN_MIN) next = k;
+    else { for (let i=1;i<15;i++){ k = addDaysKey(a.key,i); if (isTradingDay(k)){ next = k; break; } } }
+  }
+  const dayNames = ['zo','ma','di','wo','do','vr','za'];
+  let detail;
+  if (open){ detail = `sluit om ${String(Math.floor(close/60)).padStart(2,'0')}:${String(close%60).padStart(2,'0')}`; }
+  else if (next){ const [y,m,d] = next.split('-').map(Number); const dn = dayNames[new Date(Date.UTC(y,m-1,d)).getUTCDay()]; detail = next===a.key ? 'opent om 09:00' : `opent ${dn} ${d}-${m} om 09:00`; }
+  return { open, detail, key:a.key, min:a.min, trading, close };
+}
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+let S = null;
+function defaultState(){
+  return { version:1, player:null, cash:START_CAPITAL, positions:{}, transactions:[], pending:[],
+    prices:{}, index:null, source:'sim', lastUpdate:null, quoteTime:null, lastRefreshWasOpen:false,
+    bench:{ value:START_CAPITAL, lastIdx:null, lastSrc:null }, snapshots:[], realized:0, totalCosts:0,
+    frozen:null, sim:{ lastTs:null, dayKey:null }, liveCount:0 };
+}
+function load(){
+  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw){ const s = JSON.parse(raw); return Object.assign(defaultState(), s); } } catch(e){ console.warn(e); }
+  return defaultState();
+}
+function save(){ try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e){ toast('Opslaan mislukt: ' + e.message); } }
+
+function priceOf(t){ return S.prices[t]?.price ?? stockBy(t)?.sim ?? 0; }
+function reservedCash(){ return round2(S.pending.filter(o => o.side==='buy').reduce((a,o) => a + o.reserve, 0)); }
+function freeCash(){ return round2(S.cash - reservedCash()); }
+function pendingSellQty(t){ return S.pending.filter(o => o.side==='sell' && o.ticker===t).reduce((a,o) => a + o.qty, 0); }
+
+function gameDay(){
+  if (!S.player) return 0;
+  return daysBetweenKeys(S.player.startDate, ams().key) + 1;
+}
+function gameWeek(){ return Math.max(1, Math.ceil(Math.max(1, gameDay()) / 7)); }
+
+function compute(){
+  const pos = [];
+  let stockValue = 0, unrealized = 0;
+  for (const [t, p] of Object.entries(S.positions)){
+    if (!p || p.qty <= 0) continue;
+    const s = stockBy(t) || { name:t, sector:'Overig', color:'#64748b' };
+    const price = priceOf(t);
+    const value = p.qty * price;
+    const unr = (price - p.avg) * p.qty;
+    stockValue += value; unrealized += unr;
+    pos.push({ ticker:t, name:s.name, sector:s.sector, color:s.color, qty:p.qty, avg:p.avg, price, value, unr, unrPct: p.avg ? (price/p.avg - 1)*100 : 0, change:S.prices[t]?.changePct ?? 0 });
+  }
+  pos.sort((a,b) => b.value - a.value);
+  const total = S.cash + stockValue;
+  const ret = total - START_CAPITAL;
+  const retPct = ret / START_CAPITAL * 100;
+  const today = ams().key;
+  const prev = [...S.snapshots].filter(x => x.date < today).pop();
+  const dayRes = total - (prev ? prev.value : START_CAPITAL);
+  const benchValue = S.bench.value;
+  const benchPct = (benchValue / START_CAPITAL - 1) * 100;
+  const sectors = {};
+  pos.forEach(p => sectors[p.sector] = (sectors[p.sector] || 0) + p.value);
+  return { pos, stockValue, total, ret, retPct, dayRes, unrealized, realized:S.realized, costs:S.totalCosts, benchValue, benchPct, diffPP: retPct - benchPct, sectors, cashFree:freeCash(), reserved:reservedCash() };
+}
+
+/* =====================================================================
+   KOERSEN: live ophalen of simuleren
+   ===================================================================== */
+function randn(){ let u=0,v=0; while(!u) u=Math.random(); while(!v) v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+
+function simulate(now = new Date()){
+  const ms = marketState(now);
+  // initialiseren
+  if (!S.index || S.source !== 'sim' && !Object.keys(S.prices).length){
+    S.index = { price:AEX_INDEX.sim, prevClose:AEX_INDEX.sim, changePct:0 };
+  }
+  AEX_STOCKS.forEach(s => { if (!S.prices[s.ticker]) S.prices[s.ticker] = { price:s.sim, prevClose:s.sim, changePct:0 }; });
+  if (!S.index) S.index = { price:AEX_INDEX.sim, prevClose:AEX_INDEX.sim, changePct:0 };
+  const last = S.sim.lastTs ? new Date(S.sim.lastTs) : null;
+  if (ms.open){
+    let minutes;
+    const newDay = S.sim.dayKey !== ms.key;
+    if (newDay){
+      // nieuwe handelsdag: slotkoers van gisteren wordt referentie, plus een openingsgat
+      S.index.prevClose = S.index.price;
+      AEX_STOCKS.forEach(s => S.prices[s.ticker].prevClose = S.prices[s.ticker].price);
+      minutes = (ms.min - OPEN_MIN) + 120; // 'overnachtingseffect' telt als extra beweging
+      S.sim.dayKey = ms.key;
+    } else {
+      minutes = Math.max(0, (now - last) / 60000);
+    }
+    minutes = Math.min(minutes, 900);
+    const dt = minutes / 510;                 // fractie van een handelsdag
+    const m = randn() * 0.011 * Math.sqrt(dt) + 0.0002 * dt;   // marktbeweging
+    S.index.price *= Math.exp(m);
+    AEX_STOCKS.forEach(s => {
+      const beta = s.sector === 'Technologie' ? 1.3 : (s.sector === 'Consumentengoederen' || s.sector === 'Telecom') ? 0.6 : 1.0;
+      const idio = randn() * 0.013 * Math.sqrt(dt);
+      const p = S.prices[s.ticker];
+      p.price = Math.max(0.5, p.price * Math.exp(beta * m + idio));
+    });
+  }
+  AEX_STOCKS.forEach(s => { const p = S.prices[s.ticker]; p.price = Math.round(p.price * (p.price < 10 ? 1000 : 100)) / (p.price < 10 ? 1000 : 100); p.changePct = (p.price / p.prevClose - 1) * 100; });
+  S.index.price = round2(S.index.price); S.index.changePct = (S.index.price / S.index.prevClose - 1) * 100;
+  S.sim.lastTs = now.toISOString();
+}
+
+async function fetchLive(){
+  if (!DATA_ENDPOINT_URL) throw new Error('Geen DATA_ENDPOINT_URL ingesteld');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const url = DATA_ENDPOINT_URL + (DATA_ENDPOINT_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+    const res = await fetch(url, { signal:ctrl.signal, redirect:'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data || !data.quotes) throw new Error('Onverwacht antwoord');
+    return data;
+  } finally { clearTimeout(timer); }
+}
+
+function applyLive(data){
+  let ok = 0, latest = null;
+  AEX_STOCKS.forEach(s => {
+    const q = data.quotes[s.ticker];
+    const price = q && Number(q.price);
+    if (price && isFinite(price) && price > 0){
+      const prevClose = Number(q.prevClose) > 0 ? Number(q.prevClose) : (S.prices[s.ticker]?.prevClose || price);
+      const changePct = isFinite(Number(q.changePct)) && q.changePct !== null && q.changePct !== '' ? Number(q.changePct) : (price / prevClose - 1) * 100;
+      S.prices[s.ticker] = { price, prevClose, changePct, live:true, tradeTime:q.tradeTime || null };
+      ok++;
+      if (q.tradeTime && (!latest || q.tradeTime > latest)) latest = q.tradeTime;
+    } else if (S.prices[s.ticker]) {
+      S.prices[s.ticker].live = false;
+    } else {
+      S.prices[s.ticker] = { price:s.sim, prevClose:s.sim, changePct:0, live:false };
+    }
+  });
+  const iq = data.index;
+  if (iq && Number(iq.price) > 0){
+    const price = Number(iq.price);
+    const prevClose = Number(iq.prevClose) > 0 ? Number(iq.prevClose) : price;
+    S.index = { price, prevClose, changePct: isFinite(Number(iq.changePct)) && iq.changePct !== null && iq.changePct !== '' ? Number(iq.changePct) : (price/prevClose-1)*100 };
+  }
+  S.quoteTime = latest;
+  return ok;
+}
+
+let refreshing = false;
+async function refreshPrices(manual = false){
+  if (refreshing) return;
+  refreshing = true;
+  $('#refreshBtn').classList.add('spin');
+  const now = new Date();
+  let src = 'sim';
+  try {
+    if (DATA_ENDPOINT_URL){
+      const data = await fetchLive();
+      const ok = applyLive(data);
+      if (ok < AEX_STOCKS.length / 2) throw new Error('Te weinig koersen ontvangen (' + ok + ')');
+      src = 'live';
+      S.liveCount++;
+    } else {
+      simulate(now);
+    }
+  } catch(e){
+    console.warn('Live koersen niet beschikbaar:', e);
+    if (Object.keys(S.prices).length && S.source !== 'sim' && S.liveCount > 0){
+      src = 'cache';  // laatst bekende live koersen blijven staan
+    } else { simulate(now); src = 'sim'; }
+    if (manual) toast(DATA_ENDPOINT_URL ? 'Koppeling niet bereikbaar – laatst bekende koersen gebruikt' : 'Simulatiemodus: er is nog geen koersenkoppeling ingesteld');
+  }
+  // benchmark doorrekenen (keten-index: geen sprong bij wisseling van bron)
+  const effSrc = src === 'cache' ? 'live' : src;
+  if (S.index && S.index.price > 0){
+    if (S.bench.lastIdx && S.bench.lastSrc === effSrc){ S.bench.value = S.bench.value * (S.index.price / S.bench.lastIdx); }
+    S.bench.lastIdx = S.index.price; S.bench.lastSrc = effSrc;
+  }
+  S.source = src;
+  S.lastUpdate = now.toISOString();
+  const ms = marketState(now);
+  S.lastRefreshWasOpen = ms.open;
+  executePending();
+  checkFreeze();
+  updateSnapshot();
+  save();
+  refreshing = false;
+  $('#refreshBtn').classList.remove('spin');
+  render();
+  if (manual && src !== 'sim' && src !== 'cache') toast('Koersen ververst');
+}
+
+/* ---------- Snapshots (grafiek) ---------- */
+function updateSnapshot(){
+  if (!S.player) return;
+  const c = compute();
+  const key = ams().key;
+  const snap = { date:key, value:round2(c.total), bench:round2(S.bench.value), aex:S.index?.price ?? null };
+  const i = S.snapshots.findIndex(x => x.date === key);
+  if (i >= 0) S.snapshots[i] = snap; else S.snapshots.push(snap);
+  S.snapshots.sort((a,b) => a.date < b.date ? -1 : 1);
+}
+
+/* =====================================================================
+   ORDERS
+   ===================================================================== */
+function executionAllowedNow(){
+  const ms = marketState();
+  if (!ms.open) return false;
+  return true;
+}
+function pendingExecutableNow(){
+  const ms = marketState();
+  return ms.open && ms.min >= OPEN_MIN + (DATA_ENDPOINT_URL ? PENDING_EXEC_DELAY_MIN : 0);
+}
+
+function doBuy(t, qty, price, motivation, note){
+  const value = round2(qty * price), costs = costFor(value), total = round2(value + costs);
+  const p = S.positions[t] || { qty:0, avg:0 };
+  const newQty = p.qty + qty;
+  p.avg = (p.avg * p.qty + price * qty) / newQty; p.qty = newQty;
+  S.positions[t] = p;
+  S.cash = round2(S.cash - total);
+  S.totalCosts = round2(S.totalCosts + costs);
+  const s = stockBy(t);
+  const tx = { id:uid(), ts:new Date().toISOString(), type:'Koop', ticker:t, name:s?.name || t, qty, price, value, costs, net:-total, realized:0, motivation, note:note||'' };
+  S.transactions.push(tx); return tx;
+}
+function doSell(t, qty, price, motivation, note){
+  const p = S.positions[t];
+  const value = round2(qty * price), costs = costFor(value), net = round2(value - costs);
+  const realized = round2((price - p.avg) * qty);
+  p.qty -= qty; if (p.qty <= 0) delete S.positions[t];
+  S.cash = round2(S.cash + net);
+  S.realized = round2(S.realized + realized);
+  S.totalCosts = round2(S.totalCosts + costs);
+  const s = stockBy(t);
+  const tx = { id:uid(), ts:new Date().toISOString(), type:'Verkoop', ticker:t, name:s?.name || t, qty, price, value, costs, net, realized, motivation, note:note||'' };
+  S.transactions.push(tx); return tx;
+}
+
+function executePending(){
+  if (!S.pending.length || !pendingExecutableNow()) return;
+  const done = [];
+  const list = [...S.pending].sort((a,b) => a.ts < b.ts ? -1 : 1);
+  for (const o of list){
+    if (S.source !== 'sim' && S.prices[o.ticker]?.live === false) continue; // wachten op echte koers
+    S.pending = S.pending.filter(x => x.id !== o.id); // eerst uit lijst (reservering vrijgeven)
+    const price = priceOf(o.ticker);
+    if (o.side === 'buy'){
+      let qty = o.qty;
+      const avail = freeCash();
+      while (qty > 0 && round2(qty*price) + costFor(qty*price) > avail) qty--;
+      if (qty <= 0){ done.push(`Kooporder ${o.name} geannuleerd: onvoldoende saldo`); continue; }
+      doBuy(o.ticker, qty, price, o.motivation, 'Lopende order uitgevoerd bij beursopening' + (qty < o.qty ? ` (aantal verlaagd van ${o.qty} naar ${qty} wegens saldo)` : ''));
+      done.push(`Koop ${qty}× ${o.name} uitgevoerd à ${fmtEUR(price)}`);
+    } else {
+      const have = (S.positions[o.ticker]?.qty || 0) - pendingSellQty(o.ticker);
+      const qty = Math.min(o.qty, have);
+      if (qty <= 0){ done.push(`Verkooporder ${o.name} geannuleerd: geen aandelen`); continue; }
+      doSell(o.ticker, qty, price, o.motivation, 'Lopende order uitgevoerd bij beursopening');
+      done.push(`Verkoop ${qty}× ${o.name} uitgevoerd à ${fmtEUR(price)}`);
+    }
+  }
+  if (done.length) setTimeout(() => showMessage('Lopende orders uitgevoerd', '<ul>' + done.map(d => `<li>${escapeHtml(d)}</li>`).join('') + '</ul>'), 300);
+}
+
+/* =====================================================================
+   DAG 30: BEVROREN PO-EINDSTAND
+   ===================================================================== */
+function checkFreeze(){
+  if (!S.player || S.frozen) return;
+  const day = gameDay();
+  const ms = marketState();
+  const endKey = addDaysKey(S.player.startDate, GAME_DAYS - 1);
+  if (day > GAME_DAYS || (day === GAME_DAYS && ms.min >= 17*60+35)){
+    updateSnapshot();
+    const c = compute();
+    S.frozen = {
+      frozenAt:new Date().toISOString(), endDate:endKey, lateFreeze: day > GAME_DAYS + 1,
+      total:round2(c.total), cash:round2(S.cash), stockValue:round2(c.stockValue), ret:round2(c.ret), retPct:c.retPct,
+      benchValue:round2(c.benchValue), benchPct:c.benchPct, diffPP:c.diffPP, realized:round2(c.realized), unrealized:round2(c.unrealized),
+      costs:round2(c.costs), sectors:c.sectors, positions:c.pos.map(p => ({...p})),
+      transactions:JSON.parse(JSON.stringify(S.transactions)), pending:JSON.parse(JSON.stringify(S.pending)),
+      snapshots:S.snapshots.filter(x => x.date <= endKey).map(x => ({...x})), source:S.source, txCount:S.transactions.length
+    };
+    save();
+    setTimeout(() => showMessage('🎉 PO-eindstand vastgelegd', `<p>Dag ${GAME_DAYS} is voorbij. Je eindstand voor het PO-verslag is <b>bevroren</b> opgeslagen: ${fmtEUR(S.frozen.total)} (${fmtPct(S.frozen.retPct)}).</p><p>Je vindt hem bij <b>Inleveren</b>. Je mag vrijwillig doorspelen; de bevroren eindstand verandert dan niet meer.</p>`), 400);
+  }
+}
+
+/* =====================================================================
+   RENDERING
+   ===================================================================== */
+let currentTab = 'portfolio';
+const charts = {};
+function destroyCharts(){ Object.keys(charts).forEach(k => { try { charts[k].destroy(); } catch(e){} delete charts[k]; }); }
+
+function renderHeader(){
+  const ms = marketState();
+  const mp = $('#marketPill');
+  mp.className = 'pill ' + (ms.open ? 'pill-open' : 'pill-closed');
+  mp.innerHTML = `<span class="dot"></span><span>Euronext ${ms.open ? 'open' : 'gesloten'} · ${ms.detail}</span>`;
+  const dp = $('#dataPill');
+  const map = { live:['pill-live','Live koersen'], sim:['pill-sim','Simulatiemodus'], cache:['pill-cache','Laatst bekende koersen'] };
+  const [c, t] = map[S.source] || map.sim;
+  dp.className = 'pill ' + c;
+  dp.innerHTML = `<span class="dot"></span><span>${t}</span>`;
+  dp.onclick = () => openInfo('delay');
+  if (S.player){
+    $('#hdrPlayer').textContent = `${S.player.first} ${S.player.last} · ${S.player.klas}`;
+    const day = gameDay();
+    $('#dayLabel').innerHTML = day > GAME_DAYS ? `<b>Doorspelen</b> (dag ${day})` : `<b>Dag ${Math.max(1,day)} van ${GAME_DAYS}</b>`;
+  }
+  let lu = S.lastUpdate ? 'Laatste update: ' + fmtDateTime(S.lastUpdate) : 'Nog geen koersen';
+  if (S.source === 'live' && S.quoteTime) lu += ` (koersen van ${fmtDateTime(S.quoteTime).split(' ').pop()})`;
+  $('#lastUpdate').textContent = lu;
+}
+
+function render(){
+  renderHeader();
+  destroyCharts();
+  const m = $('#main');
+  if (!S.player){ m.innerHTML = ''; return; }
+  const views = { portfolio:renderPortfolio, market:renderMarket, companies:renderCompanies, transactions:renderTransactions, export:renderExport };
+  m.innerHTML = (views[currentTab] || renderPortfolio)();
+  if (currentTab === 'portfolio') drawPortfolioCharts();
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === currentTab));
+  bindMain();
+}
+
+function bannersHtml(){
+  let h = '';
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS && !window.navigator.standalone && !localStorage.getItem('aexHideInstall')){
+    h += `<div class="banner info"><div class="grow"><b>Tip:</b> tik in Safari op het deel-icoon en kies <b>"Zet op beginscherm"</b>. Doe dit vóórdat je begint: de app op je beginscherm bewaart zijn gegevens apart van Safari.</div><button class="btn ghost small" data-act="hideInstall">Verberg</button></div>`;
+  }
+  if (S.source === 'sim'){
+    h += `<div class="banner warn"><div class="grow"><b>Simulatiemodus:</b> ${DATA_ENDPOINT_URL ? 'de koersenkoppeling is tijdelijk niet bereikbaar.' : 'er is nog geen koersenkoppeling ingesteld.'} De koersen zijn gesimuleerd en niet echt.</div></div>`;
+  } else if (S.source === 'cache'){
+    h += `<div class="banner warn"><div class="grow"><b>Geen verbinding met de koersenbron.</b> Je ziet de laatst bekende koersen.</div></div>`;
+  }
+  if (S.frozen){
+    h += `<div class="banner ok"><div class="grow"><b>PO-eindstand vastgelegd</b> op ${fmtDate(S.frozen.frozenAt)}: ${fmtEUR(S.frozen.total)} (${fmtPct(S.frozen.retPct)}). Je speelt nu vrijwillig door.</div><button class="btn ghost small" data-tab-go="export">Bekijk</button></div>`;
+  }
+  return h;
+}
+
+function renderPortfolio(){
+  const c = compute();
+  const day = Math.max(1, gameDay());
+  const prog = Math.min(100, day / GAME_DAYS * 100);
+  const beat = c.diffPP >= 0;
+  let posRows = c.pos.map(p => `
+    <tr>
+      <td><button class="link-btn" data-company="${p.ticker}"><b>${escapeHtml(p.name)}</b><br><span class="muted small">${p.ticker}</span></button></td>
+      <td class="small">${escapeHtml(p.sector)}</td>
+      <td class="num">${p.qty}</td>
+      <td class="num">${fmtEUR(p.avg)}</td>
+      <td class="num">${fmtEUR(p.price)}<br><span class="small ${cls(p.change)}">${fmtPct(p.change)}</span></td>
+      <td class="num"><b>${fmtEUR(p.value)}</b></td>
+      <td class="num ${cls(p.unr)}">${fmtSignedEUR(p.unr)}<br><span class="small">${fmtPct(p.unrPct)}</span></td>
+      <td class="num"><button class="btn small" data-trade="${p.ticker}">Handelen</button></td>
+    </tr>`).join('');
+  if (!posRows) posRows = `<tr><td colspan="8" class="empty">Je hebt nog geen aandelen. Ga naar <b>AEX-beurs</b> om je eerste aandeel te kopen.</td></tr>`;
+
+  const pend = S.pending.map(o => `
+    <tr>
+      <td>${fmtDateTime(o.ts)}</td><td><b>${o.side==='buy'?'Koop':'Verkoop'}</b></td><td>${escapeHtml(o.name)}</td>
+      <td class="num">${o.qty}</td><td class="num">${fmtEUR(o.estPrice)}</td>
+      <td class="num">${o.side==='buy' ? fmtEUR(o.reserve) : o.qty + ' st.'}</td>
+      <td class="num"><button class="btn danger small" data-cancel="${o.id}">Annuleren</button></td>
+    </tr>`).join('');
+
+  return `
+  ${bannersHtml()}
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+      <b>${gameDay() > GAME_DAYS ? 'PO-periode afgerond – je speelt door' : `Dag ${day} van ${GAME_DAYS}`}</b>
+      <span class="muted small">Start: ${fmtKey(S.player.startDate)} · Einde PO: ${fmtKey(addDaysKey(S.player.startDate, GAME_DAYS-1))}</span>
+    </div>
+    <div class="progress"><div style="width:${prog}%"></div></div>
+  </div>
+  <div class="grid kpis">
+    <div class="card kpi big">
+      <div class="label">Totale portefeuillewaarde ${infoBtn('total')}</div>
+      <div class="value">${fmtEUR(c.total)}</div>
+      <div class="sub"><span class="${cls(c.ret)}">${fmtSignedEUR(c.ret)} (${fmtPct(c.retPct)})</span> sinds start</div>
+    </div>
+    <div class="card kpi"><div class="label">Vrij cash</div><div class="value">${fmtEUR(c.cashFree)}</div><div class="sub">${c.reserved > 0 ? 'Geblokkeerd: ' + fmtEUR(c.reserved) : (c.total ? fmtNum(S.cash / c.total * 100, 1) + '% van portefeuille' : '')}</div></div>
+    <div class="card kpi"><div class="label">Dagresultaat ${infoBtn('dayresult')}</div><div class="value ${cls(c.dayRes)}">${fmtSignedEUR(c.dayRes)}</div><div class="sub">${fmtPct(c.dayRes / Math.max(1, c.total - c.dayRes) * 100)}</div></div>
+    <div class="card kpi"><div class="label">Gerealiseerd ${infoBtn('realized')}</div><div class="value ${cls(c.realized)}">${fmtSignedEUR(c.realized)}</div><div class="sub">winst/verlies op verkopen</div></div>
+    <div class="card kpi"><div class="label">Ongerealiseerd ${infoBtn('realized')}</div><div class="value ${cls(c.unrealized)}">${fmtSignedEUR(c.unrealized)}</div><div class="sub">op huidige posities</div></div>
+    <div class="card kpi"><div class="label">Transactiekosten ${infoBtn('costs')}</div><div class="value">${fmtEUR(c.costs)}</div><div class="sub">${S.transactions.length} transactie(s)</div></div>
+    <div class="card kpi"><div class="label">AEX-benchmark ${infoBtn('benchmark')}</div><div class="value">${fmtEUR(c.benchValue)}</div><div class="sub ${cls(c.benchPct)}">${fmtPct(c.benchPct)}</div></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h2 style="flex-wrap:wrap">Portefeuille vs. AEX ${infoBtn('benchmark')}
+      <span style="flex:1"></span>
+      <span class="badge ${beat ? 'pos' : 'neg'}">${beat ? '🏆 Je verslaat de AEX' : '📉 Je blijft achter bij de AEX'}: ${c.diffPP >= 0 ? '+' : ''}${fmtNum(c.diffPP)} pp</span>
+    </h2>
+    <div class="chart-box"><canvas id="lineChart"></canvas></div>
+  </div>
+
+  <div class="grid two" style="margin-top:12px">
+    <div class="card"><h2>Spreiding per sector ${infoBtn('sector')}</h2><div class="pie-box"><canvas id="sectorChart"></canvas></div></div>
+    <div class="card"><h2>Spreiding per aandeel</h2><div class="pie-box"><canvas id="stockChart"></canvas></div></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h2>Mijn posities</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Aandeel</th><th>Sector</th><th class="num">Aantal</th><th class="num">GAK ${infoBtn('gak')}</th><th class="num">Koers</th><th class="num">Waarde</th><th class="num">Ongerealiseerd</th><th></th></tr></thead>
+      <tbody>${posRows}</tbody>
+    </table></div>
+  </div>
+
+  ${S.pending.length ? `
+  <div class="card" style="margin-top:12px">
+    <h2>Lopende orders ${infoBtn('pending')}</h2>
+    <p class="small muted" style="margin-top:-6px">Worden automatisch uitgevoerd als Euronext Amsterdam opent (koersen ververst na ${String(9 + Math.floor(PENDING_EXEC_DELAY_MIN/60)).padStart(2,'0')}:${String(PENDING_EXEC_DELAY_MIN%60).padStart(2,'0')}).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Ingelegd</th><th>Type</th><th>Aandeel</th><th class="num">Aantal</th><th class="num">Laatste koers</th><th class="num">Geblokkeerd</th><th></th></tr></thead>
+      <tbody>${pend}</tbody>
+    </table></div>
+  </div>` : ''}
+  `;
+}
+
+function chartColors(){
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return { grid: dark ? '#24304a' : '#e3e7ef', text: dark ? '#9aa6bd' : '#5b6476', port: dark ? '#5b8cff' : '#2563eb', bench: dark ? '#fbbf24' : '#d97706', border: dark ? '#121a2b' : '#ffffff' };
+}
+const SECTOR_COLORS = { 'Technologie':'#2563eb','Financiële dienstverlening':'#0f766e','Consumentengoederen':'#16a34a','Energie':'#d97706','Grondstoffen & chemie':'#7c3aed','Industrie':'#475569','Zakelijke informatie':'#ea580c','Gezondheidszorg':'#0891b2','Telecom':'#65a30d','Media & entertainment':'#db2777','Vastgoed':'#b91c1c','Cash':'#94a3b8','Overig':'#64748b' };
+
+function seriesFrom(snaps, startKey){
+  const pts = [{ date:startKey, label:'Start', value:START_CAPITAL, bench:START_CAPITAL }];
+  snaps.forEach(s => { if (s.date >= startKey) pts.push(s); });
+  return pts;
+}
+
+function lineChartConfig(snaps, startKey, forPdf=false){
+  const col = forPdf ? { grid:'#e5e7eb', text:'#374151', port:'#2563eb', bench:'#d97706' } : chartColors();
+  const pts = seriesFrom(snaps, startKey);
+  return {
+    type:'line',
+    data:{ labels: pts.map(p => p.label || fmtKey(p.date).slice(0,5)),
+      datasets:[
+        { label:'Mijn portefeuille', data:pts.map(p => p.value), borderColor:col.port, backgroundColor:col.port + '22', fill:true, tension:.25, pointRadius:pts.length > 40 ? 0 : 3, borderWidth:2.5 },
+        { label:'AEX-benchmark', data:pts.map(p => p.bench), borderColor:col.bench, borderDash:[6,4], fill:false, tension:.25, pointRadius:pts.length > 40 ? 0 : 2, borderWidth:2 }
+      ]},
+    options:{ responsive:!forPdf, maintainAspectRatio:false, animation:forPdf ? false : { duration:400 },
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ labels:{ color:col.text, boxWidth:14 } }, tooltip:{ callbacks:{ label: ctx => `${ctx.dataset.label}: ${fmtEUR(ctx.parsed.y)}` } } },
+      scales:{ x:{ grid:{ color:col.grid }, ticks:{ color:col.text, maxRotation:0, autoSkip:true, maxTicksLimit:10 } },
+               y:{ grid:{ color:col.grid }, ticks:{ color:col.text, callback: v => '€ ' + Number(v).toLocaleString('nl-NL') } } } }
+  };
+}
+function pieConfig(labels, values, colors, forPdf=false){
+  const col = forPdf ? { text:'#374151', border:'#ffffff' } : chartColors();
+  const total = values.reduce((a,b) => a+b, 0) || 1;
+  return { type:'doughnut',
+    data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderColor:col.border, borderWidth:2 }] },
+    options:{ responsive:!forPdf, maintainAspectRatio:false, animation:forPdf ? false : { duration:400 }, cutout:'55%',
+      plugins:{ legend:{ position:'right', labels:{ color:col.text, boxWidth:12, font:{ size:11 }, generateLabels: ch => ch.data.labels.map((l,i) => ({ text:`${l} ${fmtNum(values[i]/total*100,1)}%`, fillStyle:colors[i], strokeStyle:colors[i], fontColor:col.text, index:i })) } },
+        tooltip:{ callbacks:{ label: ctx => `${ctx.label}: ${fmtEUR(ctx.parsed)} (${fmtNum(ctx.parsed/total*100,1)}%)` } } } } };
+}
+function allocData(c){
+  const sl = Object.entries(c.sectors).sort((a,b) => b[1]-a[1]);
+  const sector = { labels:[...sl.map(x => x[0]), 'Cash'], values:[...sl.map(x => x[1]), S.cash], colors:[...sl.map(x => SECTOR_COLORS[x[0]] || '#64748b'), SECTOR_COLORS.Cash] };
+  const stock = { labels:[...c.pos.map(p => p.name), 'Cash'], values:[...c.pos.map(p => p.value), S.cash], colors:[...c.pos.map(p => p.color), SECTOR_COLORS.Cash] };
+  return { sector, stock };
+}
+function drawPortfolioCharts(){
+  if (typeof Chart === 'undefined'){ document.querySelectorAll('.chart-box,.pie-box').forEach(el => el.innerHTML = '<div class="empty">Grafieken konden niet worden geladen (geen internet?).</div>'); return; }
+  const c = compute();
+  charts.line = new Chart($('#lineChart'), lineChartConfig(S.snapshots, S.player.startDate));
+  const a = allocData(c);
+  charts.sector = new Chart($('#sectorChart'), pieConfig(a.sector.labels, a.sector.values, a.sector.colors));
+  charts.stock = new Chart($('#stockChart'), pieConfig(a.stock.labels, a.stock.values, a.stock.colors));
+}
+
+let marketFilter = { q:'', sector:'' };
+function sectors(){ return [...new Set(AEX_STOCKS.map(s => s.sector))].sort((a,b) => a.localeCompare(b,'nl')); }
+function initials(name){ const s = AEX_STOCKS.find(x => x.name === name); return s ? s.ticker.split('.')[0].slice(0,4) : name.slice(0,3).toUpperCase(); }
+
+function renderMarket(){
+  const ms = marketState();
+  return `
+  ${bannersHtml()}
+  <div class="section-title">AEX-beurs <span class="chip">${AEX_STOCKS.length} fondsen</span>
+    ${S.index ? `<span class="chip">AEX-index ${fmtNum(S.index.price)} <span class="${cls(S.index.changePct)}">${fmtPct(S.index.changePct)}</span></span>` : ''}</div>
+  ${!ms.open ? `<div class="banner info"><div class="grow">De beurs is nu gesloten (${ms.detail}). ${STRICT_EURONEXT_HOURS ? 'Je kunt wel orders inleggen: ze worden uitgevoerd zodra de beurs opent.' : 'Orders worden direct uitgevoerd tegen de laatste slotkoers.'}</div></div>` : ''}
+  <div class="toolbar">
+    <input class="search" id="searchInput" type="search" placeholder="Zoek op naam of ticker…" value="${escapeHtml(marketFilter.q)}" autocomplete="off">
+    <select class="select" id="sectorSelect"><option value="">Alle sectoren</option>${sectors().map(s => `<option ${s===marketFilter.sector?'selected':''}>${escapeHtml(s)}</option>`).join('')}</select>
+  </div>
+  <div class="stock-list" id="stockList">${stockListHtml()}</div>`;
+}
+function stockListHtml(){
+  const q = marketFilter.q.trim().toLowerCase();
+  const list = AEX_STOCKS.filter(s => (!q || s.name.toLowerCase().includes(q) || s.ticker.toLowerCase().includes(q)) && (!marketFilter.sector || s.sector === marketFilter.sector));
+  if (!list.length) return `<div class="empty">Geen aandelen gevonden.</div>`;
+  return list.map(s => {
+    const p = S.prices[s.ticker] || { price:s.sim, changePct:0 };
+    const held = S.positions[s.ticker]?.qty || 0;
+    return `<div class="stock">
+      <div class="logo" style="background:${s.color}">${initials(s.name)}</div>
+      <div class="meta"><button class="link-btn" data-company="${s.ticker}" style="min-height:0">
+        <div class="name">${escapeHtml(s.name)}</div>
+        <div class="tick">${s.ticker} · ${escapeHtml(s.sector)}</div>
+        ${held ? `<span class="chip held">In bezit: ${held}</span>` : `<span class="chip">ⓘ Over dit bedrijf</span>`}
+        ${S.source !== 'sim' && p.live === false ? `<span class="chip">geen actuele koers</span>` : ''}
+      </button></div>
+      <div class="px"><div class="p">${fmtEUR(p.price)}</div><div class="c ${cls(p.changePct)}">${fmtPct(p.changePct)}</div></div>
+      <button class="btn primary" data-trade="${s.ticker}">Handelen</button>
+    </div>`;
+  }).join('');
+}
+
+function renderCompanies(){
+  const groups = {};
+  AEX_STOCKS.forEach(s => (groups[s.sector] = groups[s.sector] || []).push(s));
+  return `
+  <div class="section-title">Bedrijven in de AEX</div>
+  <div class="banner info"><div class="grow">De <b>AEX</b> is de belangrijkste beursindex van Nederland: de grootste en meest verhandelde bedrijven op Euronext Amsterdam. Sinds september 2025 is er plek voor maximaal 30 fondsen; door overnames zijn het er nu ${AEX_STOCKS.length}. Tik op een bedrijf om te lezen wat het doet en waar je als belegger op moet letten.</div></div>
+  ${Object.keys(groups).sort((a,b)=>a.localeCompare(b,'nl')).map(g => `
+    <h3 style="margin:18px 0 8px;display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:3px;background:${SECTOR_COLORS[g]||'#64748b'}"></span>${escapeHtml(g)} <span class="muted small">(${groups[g].length})</span></h3>
+    <div class="stock-list">${groups[g].map(s => {
+      const info = COMPANY_INFO[s.ticker];
+      return `<div class="stock company-card" data-company="${s.ticker}" role="button">
+        <div class="logo" style="background:${s.color}">${initials(s.name)}</div>
+        <div class="meta"><div class="name">${escapeHtml(s.name)}</div>
+        <div class="tick" style="white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(info ? info.what : '')}</div></div>
+        <div style="font-size:22px;color:var(--muted)">›</div></div>`; }).join('')}</div>`).join('')}
+  `;
+}
+
+function renderTransactions(){
+  const tx = [...S.transactions].reverse();
+  const rows = tx.map(t => `
+    <tr>
+      <td class="small" style="white-space:nowrap">${fmtDateTime(t.ts)}</td>
+      <td><span class="badge ${t.type==='Koop'?'neutral':'neg'}" style="font-size:12px;padding:3px 9px">${t.type}</span></td>
+      <td><b>${escapeHtml(t.name)}</b><br><span class="muted small">${t.ticker}</span></td>
+      <td class="num">${t.qty}</td>
+      <td class="num">${fmtEUR(t.price)}</td>
+      <td class="num">${fmtEUR(t.costs)}</td>
+      <td class="num ${cls(t.net)}"><b>${fmtSignedEUR(t.net)}</b>${t.type==='Verkoop' ? `<br><span class="small ${cls(t.realized)}">resultaat ${fmtSignedEUR(t.realized)}</span>` : ''}</td>
+      <td class="motivation">${escapeHtml(t.motivation)}${t.note ? `<br><i>${escapeHtml(t.note)}</i>` : ''}</td>
+    </tr>`).join('');
+  return `
+  <div class="section-title">Transacties <span class="chip">${S.transactions.length}</span></div>
+  <div class="card">
+    <div class="table-wrap"><table>
+      <thead><tr><th>Datum & tijd</th><th>Type</th><th>Aandeel</th><th class="num">Aantal</th><th class="num">Koers</th><th class="num">Kosten ${infoBtn('costs')}</th><th class="num">Netto bedrag</th><th>Motivatie</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="8" class="empty">Nog geen transacties.</td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function renderExport(){
+  const f = S.frozen;
+  return `
+  <div class="section-title">Inleveren & export</div>
+  <div class="grid two">
+    <div class="card">
+      <h2>📤 Weekexport (week ${gameWeek()})</h2>
+      <p class="small muted" style="margin-top:-4px">CSV-bestand met al je gegevens, posities en transacties. Opent direct in Numbers, Excel of Google Sheets.</p>
+      <p class="small">Bestandsnaam: <code>${escapeHtml(csvFilename())}</code></p>
+      <div class="btn-row"><button class="btn primary block" data-act="shareCsv">Deel weekexport via AirDrop</button></div>
+      <h3>📄 Weekrapport (PDF)</h3>
+      <p class="small muted" style="margin-top:-4px">Overzicht met grafiek, kengetallen en transacties van de afgelopen 7 dagen.</p>
+      <button class="btn block" data-act="reportWeek">Open weekrapport</button>
+    </div>
+    <div class="card">
+      <h2>🏁 PO-eindstand (dag ${GAME_DAYS})</h2>
+      ${f ? `
+        <div class="kv">
+          <div>Vastgelegd op</div><div>${fmtDateTime(f.frozenAt)}</div>
+          <div>Eindwaarde</div><div>${fmtEUR(f.total)}</div>
+          <div>Rendement</div><div class="${cls(f.ret)}">${fmtSignedEUR(f.ret)} (${fmtPct(f.retPct)})</div>
+          <div>AEX-benchmark</div><div>${fmtEUR(f.benchValue)} (${fmtPct(f.benchPct)})</div>
+          <div>Verschil met AEX</div><div class="${cls(f.diffPP)}">${f.diffPP>=0?'+':''}${fmtNum(f.diffPP)} pp</div>
+          <div>Transactiekosten</div><div>${fmtEUR(f.costs)}</div>
+          <div>Aantal transacties</div><div>${f.txCount}</div>
+        </div>
+        ${f.lateFreeze ? `<p class="small muted">Let op: de app werd na dag ${GAME_DAYS} pas weer geopend, dus de koersen zijn van ${fmtDate(f.frozenAt)}.</p>` : ''}
+        <div class="btn-row" style="margin-top:12px"><button class="btn primary block" data-act="reportFinal">Open PO-rapport (PDF)</button></div>
+      ` : `<p class="muted">Wordt automatisch vastgelegd na het sluiten van de beurs op dag ${GAME_DAYS} (${fmtKey(addDaysKey(S.player.startDate, GAME_DAYS-1))}). Nog ${Math.max(0, GAME_DAYS - gameDay())} dag(en) te gaan.</p>`}
+    </div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h2>💾 Back-up & herstel</h2>
+    <p class="small muted" style="margin-top:-4px">Bewaar je voortgang regelmatig als back-up (bijv. in Bestanden of via AirDrop naar jezelf). Nieuwe iPad of app per ongeluk verwijderd? Dan zet je met het back-upbestand alles terug.</p>
+    <div class="btn-row">
+      <button class="btn" data-act="backup">Back-up opslaan (.json)</button>
+      <button class="btn" data-act="import">Back-up terugzetten</button>
+    </div>
+    <p class="small muted" style="margin-top:12px">Speler-ID: <b>${escapeHtml(S.player.id)}</b> · Start: ${fmtKey(S.player.startDate)} · App-versie 1.0</p>
+  </div>`;
+}
+
+/* =====================================================================
+   INTERACTIE
+   ===================================================================== */
+function bindMain(){
+  const m = $('#main');
+  m.querySelectorAll('[data-trade]').forEach(b => b.onclick = e => { e.stopPropagation(); openTrade(b.dataset.trade); });
+  m.querySelectorAll('[data-company]').forEach(b => b.onclick = () => openCompany(b.dataset.company));
+  m.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => cancelPending(b.dataset.cancel));
+  m.querySelectorAll('[data-tab-go]').forEach(b => b.onclick = () => { currentTab = b.dataset.tabGo; render(); window.scrollTo(0,0); });
+  m.querySelectorAll('[data-act]').forEach(b => b.onclick = () => actions[b.dataset.act]?.());
+  const si = $('#searchInput');
+  if (si) si.oninput = () => { marketFilter.q = si.value; $('#stockList').innerHTML = stockListHtml(); bindMain(); };
+  const ss = $('#sectorSelect');
+  if (ss) ss.onchange = () => { marketFilter.sector = ss.value; $('#stockList').innerHTML = stockListHtml(); bindMain(); };
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-info]'); if (b){ e.stopPropagation(); e.preventDefault(); openInfo(b.dataset.info); } }, true);
+
+const actions = {
+  shareCsv: () => shareFile(new Blob(['﻿' + buildCSV()], { type:'text/csv;charset=utf-8' }), csvFilename(), 'AEX weekexport'),
+  reportWeek: () => openReport('week'),
+  reportFinal: () => openReport('final'),
+  backup: () => shareFile(new Blob([JSON.stringify({ app:'AEX Beleggingsgame', exported:new Date().toISOString(), state:S }, null, 2)], { type:'application/json' }), `AEX_Backup_${safeName()}_${ams().key}.json`, 'AEX back-up'),
+  import: () => $('#importFile').click(),
+  hideInstall: () => { localStorage.setItem('aexHideInstall','1'); render(); }
+};
+
+function openModal(html, opts={}){
+  const root = $('#modalRoot');
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.innerHTML = `<div class="modal ${opts.wide?'wide':''}" role="dialog" aria-modal="true">${html}</div>`;
+  if (!opts.locked) ov.addEventListener('click', e => { if (e.target === ov) closeModal(ov); });
+  root.appendChild(ov);
+  ov.querySelectorAll('[data-close]').forEach(b => b.onclick = () => closeModal(ov));
+  document.body.style.overflow = 'hidden';
+  return ov;
+}
+function closeModal(ov){ ov.remove(); if (!$('#modalRoot').children.length) document.body.style.overflow = ''; }
+function showMessage(title, html){ openModal(`<div class="modal-head"><h2>${title}</h2><button class="close-x" data-close aria-label="Sluiten">×</button></div><div>${html}</div><div style="margin-top:16px"><button class="btn primary block" data-close>Oké</button></div>`); }
+function openInfo(key){ const t = INFO_TIPS[key]; if (!t) return; showMessage(escapeHtml(t.title), `<p style="margin:0">${escapeHtml(t.text)}</p>`); }
+let toastTimer;
+function toast(msg){ const r = $('#toastRoot'); r.innerHTML = `<div class="toast">${escapeHtml(msg)}</div>`; clearTimeout(toastTimer); toastTimer = setTimeout(() => r.innerHTML = '', 3200); }
+
+function openCompany(t){
+  const s = stockBy(t), info = COMPANY_INFO[t] || {};
+  const p = S.prices[t] || { price:s.sim, changePct:0 };
+  const held = S.positions[t];
+  const ov = openModal(`
+    <div class="modal-head">
+      <div class="logo" style="background:${s.color}">${initials(s.name)}</div>
+      <h2>${escapeHtml(s.name)}<div class="muted small" style="font-weight:500">${s.ticker} · ${escapeHtml(s.sector)}</div></h2>
+      <button class="close-x" data-close aria-label="Sluiten">×</button>
+    </div>
+    <div class="calc" style="margin-top:0">
+      <div class="row"><span>Actuele koers</span><b>${fmtEUR(p.price)} <span class="${cls(p.changePct)}">${fmtPct(p.changePct)}</span></b></div>
+      ${held ? `<div class="row"><span>In bezit</span><b>${held.qty} st. (GAK ${fmtEUR(held.avg)})</b></div>` : ''}
+    </div>
+    <div class="company-block"><h4>Wat doet het bedrijf?</h4><p>${escapeHtml(info.what || '')}</p></div>
+    <div class="company-block"><h4>Bekende producten & merken</h4><p>${escapeHtml(info.products || '')}</p></div>
+    <div class="company-block"><h4>Waarom is het belangrijk?</h4><p>${escapeHtml(info.why || '')}</p></div>
+    <div class="company-block"><h4>Waar let je als belegger op?</h4><p>${escapeHtml(info.watch || '')}</p></div>
+    <p class="small muted">Tip: zoek het laatste nieuws op met "${escapeHtml(s.name)} aandeel" voordat je een beslissing neemt.</p>
+    <button class="btn primary block" id="coTrade">Handelen in ${escapeHtml(s.name)}</button>`);
+  $('#coTrade', ov).onclick = () => { closeModal(ov); openTrade(t); };
+}
+
+/* ---------- Koop/verkoop-modal ---------- */
+function openTrade(t, side='buy'){
+  checkFreeze();
+  const s = stockBy(t);
+  const ov = openModal(`
+    <div class="modal-head">
+      <div class="logo" style="background:${s.color}">${initials(s.name)}</div>
+      <h2>${escapeHtml(s.name)}<div class="muted small" style="font-weight:500">${s.ticker} · <span id="tPrice"></span></div></h2>
+      <button class="close-x" data-close aria-label="Sluiten">×</button>
+    </div>
+    <div class="seg"><button data-side="buy">Kopen</button><button data-side="sell">Verkopen</button></div>
+    <div id="tMarket"></div>
+    <label class="f">Aantal aandelen (hele stuks)</label>
+    <div class="qty"><button data-q="-1" aria-label="Minder">−</button><input id="tQty" type="number" inputmode="numeric" min="1" step="1" value="1"><button data-q="1" aria-label="Meer">+</button></div>
+    <div class="btn-row" style="margin-top:8px"><button class="btn small" data-q="5">+5</button><button class="btn small" data-q="10">+10</button><button class="btn small" id="tMax">Maximaal</button></div>
+    <div class="hint" id="tAvail"></div>
+    <div class="calc" id="tCalc"></div>
+    <label class="f" for="tMot">Waarom doe je deze transactie? <span class="muted" style="font-weight:400">(verplicht)</span></label>
+    <textarea id="tMot" placeholder="Bijv. nieuws, spreiding, winstnemen, verwachting over de sector…" maxlength="500"></textarea>
+    <div class="counter" id="tCount"></div>
+    <div class="err" id="tErr"></div>
+    <button class="btn block" id="tConfirm" disabled>Bevestigen</button>
+  `);
+  let curSide = side;
+  const qtyEl = $('#tQty', ov), motEl = $('#tMot', ov);
+  const price = () => priceOf(t);
+  const maxQty = () => {
+    if (curSide === 'sell') return Math.max(0, (S.positions[t]?.qty || 0) - pendingSellQty(t));
+    const ms = marketState();
+    const willPend = STRICT_EURONEXT_HOURS && !ms.open;
+    const pr = price() * (willPend ? 1 + PENDING_RESERVE_BUFFER : 1);
+    let q = Math.floor(freeCash() / pr);
+    while (q > 0 && round2(q*pr) + costFor(q*pr) > freeCash()) q--;
+    return Math.max(0, q);
+  };
+  function update(){
+    const ms = marketState();
+    const willPend = STRICT_EURONEXT_HOURS && !ms.open;
+    ov.querySelectorAll('[data-side]').forEach(b => b.className = b.dataset.side === curSide ? (curSide==='buy'?'on-buy':'on-sell') : '');
+    const pr = price();
+    $('#tPrice', ov).innerHTML = `${fmtEUR(pr)} <span class="${cls(S.prices[t]?.changePct||0)}">${fmtPct(S.prices[t]?.changePct||0)}</span>`;
+    $('#tMarket', ov).innerHTML = ms.open ? `<div class="banner ok"><div class="grow">Beurs open: je order wordt <b>direct uitgevoerd</b> tegen de actuele koers.</div></div>`
+      : willPend ? `<div class="banner warn"><div class="grow">Beurs gesloten (${ms.detail}). Je order wordt een <b>lopende order</b> en wordt uitgevoerd tegen de nieuwe koers zodra de beurs opent. De koers kan dan anders zijn!</div></div>`
+      : `<div class="banner warn"><div class="grow">Beurs gesloten – je order wordt direct uitgevoerd tegen de laatste slotkoers.</div></div>`;
+    let q = parseInt(qtyEl.value, 10); if (!isFinite(q)) q = 0;
+    const value = round2(q * pr), costs = q > 0 ? costFor(value) : 0;
+    const total = curSide === 'buy' ? round2(value + costs) : round2(value - costs);
+    const reserve = willPend && curSide === 'buy' ? round2(value * (1 + PENDING_RESERVE_BUFFER) + costFor(value * (1 + PENDING_RESERVE_BUFFER))) : null;
+    $('#tAvail', ov).textContent = curSide === 'buy' ? `Vrij cash: ${fmtEUR(freeCash())} · maximaal ${maxQty()} stuks` : `In bezit (beschikbaar): ${maxQty()} stuks`;
+    $('#tCalc', ov).innerHTML = `
+      <div class="row"><span>${q} × ${fmtEUR(pr)}${willPend ? ' (indicatie)' : ''}</span><span>${fmtEUR(value)}</span></div>
+      <div class="row"><span>Transactiekosten (${fmtEUR(COST_FIXED)} + ${String(COST_PERCENT).replace('.',',')}%) ${infoBtn('costs')}</span><span>${curSide==='buy'?'+':'−'} ${fmtEUR(costs)}</span></div>
+      <div class="row total"><span>${curSide === 'buy' ? 'Totaal te betalen' : 'Netto-opbrengst'}</span><span>${fmtEUR(total)}</span></div>
+      ${reserve !== null ? `<div class="row small muted"><span>Tijdelijk geblokkeerd (incl. ${PENDING_RESERVE_BUFFER*100}% buffer)</span><span>${fmtEUR(reserve)}</span></div>` : ''}
+      ${q > 0 ? `<div class="row small muted"><span>Kosten als % van order</span><span>${fmtNum(costs/Math.max(value,0.01)*100)}%</span></div>` : ''}`;
+    const mot = motEl.value.trim();
+    $('#tCount', ov).textContent = `${mot.length} / minimaal ${MIN_MOTIVATION} tekens`;
+    let err = '';
+    if (S.source !== 'sim' && S.prices[t] && S.prices[t].live === false) err = 'Voor dit aandeel is nu geen actuele koers beschikbaar. Handelen kan weer zodra de koers binnenkomt.';
+    else if (!(q >= 1) || String(qtyEl.value).includes('.') || String(qtyEl.value).includes(',')) err = 'Vul een heel aantal aandelen in (minimaal 1).';
+    else if (curSide === 'buy' && (reserve ?? total) > freeCash()) err = 'Niet genoeg vrij cash. Kopen op krediet is niet toegestaan.';
+    else if (curSide === 'sell' && q > maxQty()) err = maxQty() === 0 ? 'Je hebt geen (vrije) aandelen om te verkopen. Short gaan is niet toegestaan.' : `Je kunt maximaal ${maxQty()} stuks verkopen.`;
+    const errEl = $('#tErr', ov);
+    errEl.textContent = err;
+    const okMot = mot.length >= MIN_MOTIVATION;
+    const btn = $('#tConfirm', ov);
+    btn.disabled = !!err || !okMot;
+    btn.className = 'btn block ' + (curSide === 'buy' ? 'buy' : 'sell');
+    btn.textContent = (willPend ? 'Lopende order inleggen: ' : 'Bevestig ') + (curSide === 'buy' ? `koop ${q > 0 ? q : ''} ${s.name}` : `verkoop ${q > 0 ? q : ''} ${s.name}`);
+  }
+  ov.querySelectorAll('[data-side]').forEach(b => b.onclick = () => { curSide = b.dataset.side; if (curSide==='sell' && +qtyEl.value > maxQty()) qtyEl.value = Math.max(1, maxQty()); update(); });
+  ov.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { const v = Math.max(1, (parseInt(qtyEl.value,10)||0) + Number(b.dataset.q)); qtyEl.value = v; update(); });
+  $('#tMax', ov).onclick = () => { qtyEl.value = Math.max(1, maxQty()); update(); };
+  qtyEl.oninput = update; motEl.oninput = update;
+  $('#tConfirm', ov).onclick = () => { confirmTrade(t, curSide, parseInt(qtyEl.value,10), motEl.value.trim()); closeModal(ov); };
+  if (side === 'buy' && !(S.positions[t]?.qty)) curSide = 'buy';
+  update();
+}
+
+function confirmTrade(t, side, qty, motivation){
+  if (!(qty >= 1) || motivation.length < MIN_MOTIVATION) return;
+  const s = stockBy(t);
+  const ms = marketState();
+  const price = priceOf(t);
+  if (!ms.open && STRICT_EURONEXT_HOURS){
+    const value = qty * price;
+    const reserve = side === 'buy' ? round2(value * (1 + PENDING_RESERVE_BUFFER) + costFor(value * (1 + PENDING_RESERVE_BUFFER))) : 0;
+    if (side === 'buy' && reserve > freeCash()) return toast('Niet genoeg vrij cash');
+    if (side === 'sell' && qty > (S.positions[t]?.qty || 0) - pendingSellQty(t)) return toast('Niet genoeg aandelen');
+    S.pending.push({ id:uid(), ts:new Date().toISOString(), side, ticker:t, name:s.name, qty, estPrice:price, reserve, motivation });
+    save(); render();
+    showMessage('Lopende order ingelegd', `<p>Je ${side==='buy'?'kooporder':'verkooporder'} voor <b>${qty}× ${escapeHtml(s.name)}</b> staat klaar en wordt uitgevoerd zodra Euronext Amsterdam opent (${ms.detail}).</p><p class="small muted">Status: "Lopende order (in afwachting van beursopening)". Je kunt hem tot die tijd annuleren in je Portefeuille.</p>`);
+    return;
+  }
+  const note = !ms.open ? 'Beurs gesloten – uitgevoerd tegen slotkoers' : '';
+  let tx;
+  if (side === 'buy'){
+    const value = round2(qty * price);
+    if (round2(value + costFor(value)) > freeCash()) return toast('Niet genoeg vrij cash');
+    tx = doBuy(t, qty, price, motivation, note);
+  } else {
+    if (qty > (S.positions[t]?.qty || 0) - pendingSellQty(t)) return toast('Niet genoeg aandelen');
+    tx = doSell(t, qty, price, motivation, note);
+  }
+  updateSnapshot(); save(); render();
+  toast((note ? note + ': ' : '') + `${tx.type} ${qty}× ${s.name} à ${fmtEUR(price)} uitgevoerd`);
+}
+function cancelPending(id){
+  const o = S.pending.find(x => x.id === id); if (!o) return;
+  const ov = openModal(`<div class="modal-head"><h2>Order annuleren?</h2><button class="close-x" data-close>×</button></div>
+    <p>${o.side==='buy'?'Kooporder':'Verkooporder'} ${o.qty}× ${escapeHtml(o.name)} annuleren?${o.side==='buy' ? ` Het geblokkeerde bedrag (${fmtEUR(o.reserve)}) komt weer vrij.` : ''}</p>
+    <div class="btn-row"><button class="btn" data-close style="flex:1">Nee</button><button class="btn sell" id="cYes" style="flex:1">Ja, annuleren</button></div>`);
+  $('#cYes', ov).onclick = () => { S.pending = S.pending.filter(x => x.id !== id); save(); closeModal(ov); render(); toast('Order geannuleerd'); };
+}
+
+/* =====================================================================
+   EXPORT: CSV, delen, back-up
+   ===================================================================== */
+function safeName(){ const p = S.player; return [p.first, p.last].join('_').replace(/\s+/g,'_').replace(/[^\p{L}\p{N}_-]/gu,''); }
+function csvFilename(){ return `AEX_Week${gameWeek()}_${safeName()}_${S.player.klas.replace(/[^\p{L}\p{N}-]/gu,'')}.csv`; }
+const csvNum = (n, d=2) => (isFinite(n) ? n : 0).toFixed(d).replace('.', ',');
+const csvCell = v => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+function buildCSV(){
+  const c = compute(), p = S.player, L = [];
+  const row = (...a) => L.push(a.map(csvCell).join(';'));
+  row('AEX Beleggingsgame – weekexport');
+  row('Voornaam', p.first); row('Achternaam', p.last); row('Klas', p.klas); row('Speler-ID', p.id);
+  row('Startdatum', fmtKey(p.startDate)); row('Exportdatum', fmtDateTime(new Date())); row('Weeknummer', gameWeek()); row('Speldag', gameDay());
+  row('Koersbron', { live:'Live (Google Finance, max. ~20 min vertraagd)', sim:'Simulatie', cache:'Laatst bekende koersen' }[S.source]);
+  row('Laatste koersupdate', S.lastUpdate ? fmtDateTime(S.lastUpdate) : '-');
+  row('');
+  row('KERNCIJFERS', 'Waarde');
+  row('Startkapitaal (€)', csvNum(START_CAPITAL));
+  row('Totale portefeuillewaarde (€)', csvNum(c.total));
+  row('Waarde aandelen (€)', csvNum(c.stockValue));
+  row('Cash totaal (€)', csvNum(S.cash));
+  row('Vrij cash (€)', csvNum(c.cashFree));
+  row('Totaal rendement (€)', csvNum(c.ret));
+  row('Totaal rendement (%)', csvNum(c.retPct));
+  row('Dagresultaat (€)', csvNum(c.dayRes));
+  row('Gerealiseerd resultaat (€)', csvNum(c.realized));
+  row('Ongerealiseerd resultaat (€)', csvNum(c.unrealized));
+  row('Totaal betaalde transactiekosten (€)', csvNum(c.costs));
+  row('Aantal transacties', S.transactions.length);
+  row('');
+  row('AEX-BENCHMARK', 'Waarde');
+  row('Waarde € ' + START_CAPITAL + ' in AEX (€)', csvNum(c.benchValue));
+  row('Rendement AEX (%)', csvNum(c.benchPct));
+  row('Verschil portefeuille t.o.v. AEX (procentpunt)', csvNum(c.diffPP));
+  row('Resultaat', c.diffPP >= 0 ? 'Verslaat de AEX' : 'Blijft achter bij de AEX');
+  row('');
+  row('POSITIES');
+  row('Aandeel', 'Ticker', 'Sector', 'Aantal', 'GAK (€)', 'Koers (€)', 'Waarde (€)', 'Ongerealiseerd (€)', 'Ongerealiseerd (%)', 'Weging (%)');
+  c.pos.forEach(x => row(x.name, x.ticker, x.sector, x.qty, csvNum(x.avg, 4), csvNum(x.price), csvNum(x.value), csvNum(x.unr), csvNum(x.unrPct), csvNum(x.value / c.total * 100)));
+  row('Cash', '', '', '', '', '', csvNum(S.cash), '', '', csvNum(S.cash / c.total * 100));
+  row('');
+  row('SECTORSPREIDING');
+  row('Sector', 'Waarde (€)', 'Weging (%)');
+  Object.entries(c.sectors).sort((a,b) => b[1]-a[1]).forEach(([k,v]) => row(k, csvNum(v), csvNum(v / c.total * 100)));
+  row('Cash', csvNum(S.cash), csvNum(S.cash / c.total * 100));
+  row('');
+  row('TRANSACTIEGESCHIEDENIS');
+  row('Datum', 'Tijd', 'Type', 'Aandeel', 'Ticker', 'Aantal', 'Koers (€)', 'Orderwaarde (€)', 'Transactiekosten (€)', 'Netto bedrag (€)', 'Gerealiseerd (€)', 'Motivatie', 'Opmerking');
+  S.transactions.forEach(t => { const dt = fmtDateTime(t.ts).split(' '); row(dt[0].replace(',',''), dt[1] || '', t.type, t.name, t.ticker, t.qty, csvNum(t.price), csvNum(t.value), csvNum(t.costs), csvNum(t.net), t.type==='Verkoop' ? csvNum(t.realized) : '', t.motivation, t.note); });
+  if (S.pending.length){
+    row(''); row('LOPENDE ORDERS');
+    row('Ingelegd', 'Type', 'Aandeel', 'Aantal', 'Indicatiekoers (€)', 'Geblokkeerd (€)', 'Motivatie');
+    S.pending.forEach(o => row(fmtDateTime(o.ts), o.side==='buy'?'Koop':'Verkoop', o.name, o.qty, csvNum(o.estPrice), csvNum(o.reserve), o.motivation));
+  }
+  if (S.frozen){
+    const f = S.frozen;
+    row(''); row('BEVROREN PO-EINDSTAND (DAG ' + GAME_DAYS + ')');
+    row('Vastgelegd op', fmtDateTime(f.frozenAt)); row('Eindwaarde (€)', csvNum(f.total)); row('Rendement (%)', csvNum(f.retPct));
+    row('AEX-rendement (%)', csvNum(f.benchPct)); row('Verschil (pp)', csvNum(f.diffPP)); row('Transactiekosten (€)', csvNum(f.costs));
+  }
+  row('');
+  row('DAGELIJKSE SNAPSHOTS');
+  row('Datum', 'Portefeuillewaarde (€)', 'AEX-benchmark (€)');
+  S.snapshots.forEach(s => row(fmtKey(s.date), csvNum(s.value), csvNum(s.bench)));
+  return L.join('\r\n');
+}
+
+async function shareFile(blob, filename, title){
+  try {
+    const file = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title });
+      return;
+    }
+  } catch(e){
+    if (e && e.name === 'AbortError') return; // gebruiker annuleerde
+    console.warn('Delen mislukt, val terug op downloaden', e);
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Bestand gedownload: ' + filename);
+}
+
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const st = data.state || data;
+    if (!st.player || !Array.isArray(st.transactions) || typeof st.cash !== 'number') throw new Error('Geen geldig back-upbestand');
+    const ov = openModal(`<div class="modal-head"><h2>Back-up terugzetten?</h2><button class="close-x" data-close>×</button></div>
+      <p>Back-up van <b>${escapeHtml(st.player.first)} ${escapeHtml(st.player.last)}</b> (${escapeHtml(st.player.klas)}), gemaakt op ${data.exported ? fmtDateTime(data.exported) : 'onbekend'}, met ${st.transactions.length} transacties.</p>
+      <p class="small muted">Je huidige voortgang op dit apparaat wordt hierdoor vervangen.</p>
+      <div class="btn-row"><button class="btn" data-close style="flex:1">Annuleren</button><button class="btn primary" id="impYes" style="flex:1">Terugzetten</button></div>`);
+    $('#impYes', ov).onclick = () => { S = Object.assign(defaultState(), st); save(); closeModal(ov); render(); toast('Back-up teruggezet'); refreshPrices(); };
+  } catch(err){ showMessage('Importeren mislukt', `<p>${escapeHtml(err.message)}</p>`); }
+});
+
+/* =====================================================================
+   RAPPORT (week / dag 30) + PDF
+   ===================================================================== */
+function loadScript(src){ return new Promise((res, rej) => { if (document.querySelector(`script[src="${src}"]`)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Kon ' + src + ' niet laden')); document.head.appendChild(s); }); }
+async function loadPdfLibs(){
+  if (!window.jspdf) await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+  if (!window.jspdf?.jsPDF?.API?.autoTable) await loadScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js');
+}
+
+function reportData(kind){
+  const p = S.player;
+  if (kind === 'final' && S.frozen){
+    const f = S.frozen;
+    return { kind, title:`PO-eindrapport – dag ${GAME_DAYS}`, period:`${fmtKey(p.startDate)} t/m ${fmtKey(f.endDate)}`, generated:f.frozenAt,
+      total:f.total, cash:f.cash, stockValue:f.stockValue, ret:f.ret, retPct:f.retPct, benchValue:f.benchValue, benchPct:f.benchPct, diffPP:f.diffPP,
+      realized:f.realized, unrealized:f.unrealized, costs:f.costs, sectors:f.sectors, pos:f.positions, tx:f.transactions, snapshots:f.snapshots, txCountAll:f.transactions.length };
+  }
+  const c = compute();
+  const since = new Date(Date.now() - 7*86400000).toISOString();
+  return { kind:'week', title:`Weekrapport – week ${gameWeek()}`, period:`${fmtDate(since)} t/m ${fmtDate(new Date())}`, generated:new Date().toISOString(),
+    total:c.total, cash:S.cash, stockValue:c.stockValue, ret:c.ret, retPct:c.retPct, benchValue:c.benchValue, benchPct:c.benchPct, diffPP:c.diffPP,
+    realized:c.realized, unrealized:c.unrealized, costs:c.costs, sectors:c.sectors, pos:c.pos, tx:S.transactions.filter(t => t.ts >= since), snapshots:S.snapshots, txCountAll:S.transactions.length };
+}
+
+function makeChartImage(cfg, w, h){
+  if (typeof Chart === 'undefined') return null;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  cv.style.cssText = `position:fixed;left:-9999px;top:0;width:${w}px;height:${h}px`;
+  document.body.appendChild(cv);
+  cfg.options.devicePixelRatio = 2;
+  cfg.options.plugins = cfg.options.plugins || {};
+  const ch = new Chart(cv, cfg);
+  // witte achtergrond
+  const ctx = cv.getContext('2d'); ctx.save(); ctx.globalCompositeOperation = 'destination-over'; ctx.fillStyle = '#fff'; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore();
+  const url = cv.toDataURL('image/png');
+  ch.destroy(); cv.remove();
+  return url;
+}
+
+function openReport(kind){
+  const d = reportData(kind), p = S.player;
+  const chartImg = makeChartImage(lineChartConfig(d.snapshots, p.startDate, true), 900, 360);
+  const total = d.total || 1;
+  const secRows = Object.entries(d.sectors).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${fmtEUR(v)}</td><td class="num">${fmtNum(v/total*100,1)}%</td></tr>`).join('') + `<tr><td>Cash</td><td class="num">${fmtEUR(d.cash)}</td><td class="num">${fmtNum(d.cash/total*100,1)}%</td></tr>`;
+  const posRows = d.pos.map(x => `<tr><td>${escapeHtml(x.name)}</td><td class="num">${x.qty}</td><td class="num">${fmtEUR(x.avg)}</td><td class="num">${fmtEUR(x.price)}</td><td class="num">${fmtEUR(x.value)}</td><td class="num ${cls(x.unr)}">${fmtSignedEUR(x.unr)}</td></tr>`).join('') || `<tr><td colspan="6" class="muted">Geen posities</td></tr>`;
+  const txRows = d.tx.map(t => `<tr><td>${fmtDateTime(t.ts)}</td><td>${t.type}</td><td>${escapeHtml(t.name)}</td><td class="num">${t.qty}</td><td class="num">${fmtEUR(t.price)}</td><td class="num">${fmtEUR(t.costs)}</td><td class="num">${fmtSignedEUR(t.net)}</td><td class="motivation">${escapeHtml(t.motivation)}</td></tr>`).join('') || `<tr><td colspan="8" class="muted">Geen transacties in deze periode</td></tr>`;
+  const ov = openModal(`
+    <div class="modal-head no-print"><h2>${escapeHtml(d.title)}</h2><button class="close-x" data-close>×</button></div>
+    <div class="btn-row no-print" style="margin-bottom:14px">
+      <button class="btn primary" id="rPdf" style="flex:1">Deel als PDF (AirDrop)</button>
+      <button class="btn" id="rPrint" style="flex:1">Afdrukken / bewaar als PDF</button>
+    </div>
+    <div class="report" id="printArea">
+      <h1>AEX Beleggingsgame – ${escapeHtml(d.title)}</h1>
+      <div class="muted small">${escapeHtml(p.first)} ${escapeHtml(p.last)} · klas ${escapeHtml(p.klas)} · speler-ID ${escapeHtml(p.id)}<br>Periode: ${d.period} · gemaakt op ${fmtDateTime(d.generated)}</div>
+      <h3>Kerncijfers</h3>
+      <div class="kv">
+        <div>Portefeuillewaarde</div><div>${fmtEUR(d.total)}</div>
+        <div>Totaal rendement</div><div class="${cls(d.ret)}">${fmtSignedEUR(d.ret)} (${fmtPct(d.retPct)})</div>
+        <div>Cash</div><div>${fmtEUR(d.cash)}</div>
+        <div>Gerealiseerd resultaat</div><div class="${cls(d.realized)}">${fmtSignedEUR(d.realized)}</div>
+        <div>Ongerealiseerd resultaat</div><div class="${cls(d.unrealized)}">${fmtSignedEUR(d.unrealized)}</div>
+        <div>Totaal transactiekosten</div><div>${fmtEUR(d.costs)}</div>
+        <div>Aantal transacties (totaal)</div><div>${d.txCountAll}</div>
+      </div>
+      <h3>Vergelijking met de AEX</h3>
+      <div class="kv">
+        <div>€ ${START_CAPITAL.toLocaleString('nl-NL')} in de AEX zou nu zijn</div><div>${fmtEUR(d.benchValue)} (${fmtPct(d.benchPct)})</div>
+        <div>Verschil</div><div class="${cls(d.diffPP)}">${d.diffPP>=0?'+':''}${fmtNum(d.diffPP)} procentpunt – ${d.diffPP >= 0 ? 'verslaat de AEX' : 'blijft achter bij de AEX'}</div>
+      </div>
+      ${chartImg ? `<img class="chart-img" src="${chartImg}" alt="Grafiek portefeuille vs AEX">` : ''}
+      <h3>Sectorspreiding</h3>
+      <div class="table-wrap"><table><thead><tr><th>Sector</th><th class="num">Waarde</th><th class="num">Weging</th></tr></thead><tbody>${secRows}</tbody></table></div>
+      <h3>Posities</h3>
+      <div class="table-wrap"><table><thead><tr><th>Aandeel</th><th class="num">Aantal</th><th class="num">GAK</th><th class="num">Koers</th><th class="num">Waarde</th><th class="num">Ongerealiseerd</th></tr></thead><tbody>${posRows}</tbody></table></div>
+      <h3>Transacties ${kind === 'final' ? '(volledige PO-periode)' : '(afgelopen 7 dagen)'}</h3>
+      <div class="table-wrap"><table><thead><tr><th>Datum</th><th>Type</th><th>Aandeel</th><th class="num">Aantal</th><th class="num">Koers</th><th class="num">Kosten</th><th class="num">Netto</th><th>Motivatie</th></tr></thead><tbody>${txRows}</tbody></table></div>
+    </div>`, { wide:true });
+  $('#rPrint', ov).onclick = () => window.print();
+  $('#rPdf', ov).onclick = async () => {
+    const btn = $('#rPdf', ov); btn.disabled = true; btn.textContent = 'PDF maken…';
+    try { const blob = await buildPdf(d, chartImg); await shareFile(blob, `AEX_${kind==='final' ? 'PO-eindrapport' : 'Week' + gameWeek()}_${safeName()}_${S.player.klas.replace(/[^\p{L}\p{N}-]/gu,'')}.pdf`, d.title); }
+    catch(e){ showMessage('PDF maken mislukt', `<p>${escapeHtml(e.message)}</p><p>Gebruik de knop "Afdrukken / bewaar als PDF".</p>`); }
+    btn.disabled = false; btn.textContent = 'Deel als PDF (AirDrop)';
+  };
+}
+
+async function buildPdf(d, chartImg){
+  await loadPdfLibs();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const clean = s => String(s ?? '').replace(/[  ]/g, ' ');
+  const E = n => clean(fmtEUR(n)), SE = n => clean(fmtSignedEUR(n));
+  const p = S.player;
+  doc.setFillColor(11,27,58); doc.rect(0,0,210,28,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text(clean('AEX Beleggingsgame – ' + d.title), 14, 13);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text(clean(`${p.first} ${p.last} · klas ${p.klas} · speler-ID ${p.id}`), 14, 20);
+  doc.text(clean(`Periode: ${d.period} · gemaakt op ${fmtDateTime(d.generated)}`), 14, 25);
+  doc.setTextColor(0,0,0);
+  const head = { fillColor:[37,99,235], textColor:255, fontStyle:'bold' };
+  doc.autoTable({ startY:34, head:[['Kerncijfer','Waarde']], headStyles:head, theme:'striped', styles:{ fontSize:10 }, columnStyles:{ 1:{ halign:'right' } }, margin:{ left:14, right:110 },
+    body:[['Portefeuillewaarde', E(d.total)], ['Totaal rendement', `${SE(d.ret)} (${clean(fmtPct(d.retPct))})`], ['Cash', E(d.cash)], ['Gerealiseerd', SE(d.realized)], ['Ongerealiseerd', SE(d.unrealized)], ['Transactiekosten', E(d.costs)], ['Aantal transacties', String(d.txCountAll)]] });
+  doc.autoTable({ startY:34, head:[['AEX-vergelijking','']], headStyles:head, theme:'striped', styles:{ fontSize:10 }, columnStyles:{ 1:{ halign:'right' } }, margin:{ left:106, right:14 },
+    body:[['AEX-benchmark', E(d.benchValue)], ['Rendement AEX', clean(fmtPct(d.benchPct))], ['Mijn rendement', clean(fmtPct(d.retPct))], ['Verschil', `${d.diffPP>=0?'+':''}${clean(fmtNum(d.diffPP))} pp`], ['Conclusie', d.diffPP >= 0 ? 'Verslaat de AEX' : 'Blijft achter']] });
+  let y = Math.max(doc.lastAutoTable.finalY, 90) + 6;
+  if (chartImg){ doc.addImage(chartImg, 'PNG', 14, y, 182, 72); y += 78; }
+  const total = d.total || 1;
+  const ny = yy => { if (yy > 255){ doc.addPage(); return 18; } return yy; };
+  doc.autoTable({ startY:ny(y), head:[['Sector','Waarde','Weging']], headStyles:head, styles:{ fontSize:9 }, columnStyles:{ 1:{ halign:'right' }, 2:{ halign:'right' } },
+    body:[...Object.entries(d.sectors).sort((a,b) => b[1]-a[1]).map(([k,v]) => [k, E(v), clean(fmtNum(v/total*100,1)) + '%']), ['Cash', E(d.cash), clean(fmtNum(d.cash/total*100,1)) + '%']] });
+  doc.autoTable({ startY:ny(doc.lastAutoTable.finalY + 6), head:[['Aandeel','Sector','Aantal','GAK','Koers','Waarde','Ongerealiseerd']], headStyles:head, styles:{ fontSize:9 },
+    columnStyles:{ 2:{ halign:'right' }, 3:{ halign:'right' }, 4:{ halign:'right' }, 5:{ halign:'right' }, 6:{ halign:'right' } },
+    body: d.pos.length ? d.pos.map(x => [x.name, x.sector, String(x.qty), E(x.avg), E(x.price), E(x.value), SE(x.unr)]) : [['Geen posities','','','','','','']] });
+  doc.autoTable({ startY:ny(doc.lastAutoTable.finalY + 6), head:[['Datum','Type','Aandeel','Aantal','Koers','Kosten','Netto','Motivatie']], headStyles:head, styles:{ fontSize:8, cellPadding:1.5 },
+    columnStyles:{ 0:{ cellWidth:24 }, 3:{ halign:'right' }, 4:{ halign:'right' }, 5:{ halign:'right' }, 6:{ halign:'right' }, 7:{ cellWidth:55 } },
+    body: d.tx.length ? d.tx.map(t => [clean(fmtDateTime(t.ts)), t.type, t.name, String(t.qty), E(t.price), E(t.costs), SE(t.net), clean(t.motivation + (t.note ? ' (' + t.note + ')' : ''))]) : [['Geen transacties in deze periode','','','','','','','']] });
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(120); doc.text(`Pagina ${i} van ${n} · AEX Beleggingsgame`, 105, 290, { align:'center' }); }
+  return doc.output('blob');
+}
+
+/* =====================================================================
+   ONBOARDING
+   ===================================================================== */
+function genPlayerId(){ const a = new Uint8Array(6); crypto.getRandomValues(a); const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const s = Array.from(a, b => c[b % c.length]).join(''); return `AEX-${s.slice(0,3)}-${s.slice(3)}`; }
+function onboarding(){
+  const ov = openModal(`
+    <div class="modal-head"><h2>Welkom bij de AEX Beleggingsgame 📈</h2></div>
+    <p>Je krijgt <b>${fmtEUR(START_CAPITAL)}</b> virtueel startkapitaal. Beleg ${GAME_DAYS} dagen lang in de bedrijven van de AEX en probeer de AEX-index te verslaan. Bij elke transactie leg je uit <i>waarom</i>.</p>
+    <label class="f" for="obFirst">Voornaam</label><input class="f" id="obFirst" autocomplete="given-name">
+    <label class="f" for="obLast">Achternaam</label><input class="f" id="obLast" autocomplete="family-name">
+    <label class="f" for="obKlas">Klas</label><input class="f" id="obKlas" placeholder="bijv. 4H2" autocapitalize="characters">
+    <div class="err" id="obErr"></div>
+    <button class="btn primary block" id="obGo" style="margin-top:8px">Start het spel</button>
+    <p class="small muted" style="margin-top:12px">Al eerder gespeeld op een ander apparaat? <button class="btn ghost small" id="obImport" style="min-height:44px;padding:0 6px;color:var(--accent)">Zet een back-up terug</button></p>
+  `, { locked:true });
+  $('#obImport', ov).onclick = () => { closeModal(ov); $('#importFile').click(); setTimeout(() => { if (!S.player) onboarding(); }, 60000); };
+  $('#obGo', ov).onclick = () => {
+    const first = $('#obFirst', ov).value.trim(), last = $('#obLast', ov).value.trim(), klas = $('#obKlas', ov).value.trim().toUpperCase();
+    if (!first || !last || !klas) { $('#obErr', ov).textContent = 'Vul je voornaam, achternaam en klas in.'; return; }
+    S = defaultState();
+    S.player = { id:genPlayerId(), first, last, klas, startDate: FIXED_START_DATE || ams().key, createdAt:new Date().toISOString() };
+    save(); closeModal(ov); render(); refreshPrices();
+  };
+}
+
+/* =====================================================================
+   APP-ICOON & START
+   ===================================================================== */
+function makeIcon(){
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 180; const x = c.getContext('2d');
+    const g = x.createLinearGradient(0,0,180,180); g.addColorStop(0,'#0b1b3a'); g.addColorStop(1,'#2563eb');
+    x.fillStyle = g; x.fillRect(0,0,180,180);
+    x.strokeStyle = '#4ade80'; x.lineWidth = 12; x.lineCap = 'round'; x.lineJoin = 'round';
+    x.beginPath(); x.moveTo(30,125); x.lineTo(70,85); x.lineTo(100,108); x.lineTo(150,50); x.stroke();
+    x.fillStyle = '#fff'; x.font = 'bold 34px -apple-system,Helvetica,Arial'; x.textAlign = 'center'; x.fillText('AEX', 90, 160);
+    const l = document.createElement('link'); l.rel = 'apple-touch-icon'; l.href = c.toDataURL('image/png'); document.head.appendChild(l);
+    const f = document.createElement('link'); f.rel = 'icon'; f.href = l.href; document.head.appendChild(f);
+  } catch(e){}
+}
+
+function tick(){
+  if (!S || !S.player) return;
+  renderHeader();
+  const now = Date.now();
+  const last = S.lastUpdate ? new Date(S.lastUpdate).getTime() : 0;
+  const ms = marketState();
+  const needPending = S.pending.length && pendingExecutableNow() && (!S.lastRefreshWasOpen || ams(new Date(last)).key !== ms.key || ams(new Date(last)).min < OPEN_MIN + (DATA_ENDPOINT_URL ? PENDING_EXEC_DELAY_MIN : 0));
+  if (now - last >= REFRESH_INTERVAL_MIN * 60000 || needPending) refreshPrices();
+  else { const before = !!S.frozen; checkFreeze(); if (!before && S.frozen) render(); }
+}
+
+function init(){
+  makeIcon();
+  S = load();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => { currentTab = b.dataset.tab; render(); window.scrollTo(0,0); });
+  $('#refreshBtn').onclick = () => refreshPrices(true);
+  render();
+  if (!S.player) onboarding();
+  else refreshPrices();
+  setInterval(tick, 30000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick(); });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => render());
+}
+init();
+</script>
+</body>
+</html>
