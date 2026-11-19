@@ -175,6 +175,21 @@ input.f{width:100%;min-height:48px;border-radius:12px;border:1px solid var(--bor
 .pie-box{position:relative;height:260px}
 .progress{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--border)}
 .progress > div{height:100%;background:linear-gradient(90deg,#2563eb,#22c55e)}
+.po-row{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--border)}
+.po-row:first-of-type{border-top:none}
+.po-row .grow{flex:1;min-width:0}
+.po-task{margin:12px 0;box-shadow:none;background:var(--surface-2)}
+.po-photos{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}
+.po-photos img{max-width:100%;max-height:240px;border-radius:10px;border:1px solid var(--border)}
+.po-ph{width:150px;min-height:110px;border:2px dashed var(--border);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-weight:600;font-size:14px;color:var(--accent);background:var(--surface);padding:6px;cursor:pointer;text-align:center}
+.po-ph img{max-height:110px;max-width:136px;border:none}
+.po-ph span{font-size:11px;color:var(--muted);font-weight:500}
+.po-ph.busy{opacity:.6;pointer-events:none}
+.po-ph-missing{font-size:13px;color:var(--muted)}
+.po-check{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin:10px 0;padding:10px 12px;border:1px solid var(--border);border-radius:12px}
+.po-check input{width:20px;height:20px;margin-top:1px}
+.po-prev{margin:8px 0;padding:8px 12px;border:1px solid var(--border);border-radius:12px;font-size:14px}
+.po-prev summary{font-weight:600;cursor:pointer}
 .empty{text-align:center;color:var(--muted);padding:24px 8px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px}
 .kv div:nth-child(odd){color:var(--muted)}
@@ -226,6 +241,8 @@ input.f{width:100%;min-height:48px;border-radius:12px;border:1px solid var(--bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 0 1 2-2h8l6 6v12"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h6"/></svg>Bedrijven</button>
     <button class="tab" data-tab="transactions">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>Transacties</button>
+    <button class="tab" data-tab="po">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>PO</button>
     <button class="tab" data-tab="export">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>Inleveren</button>
   </div>
@@ -692,14 +709,16 @@ async function api(payload){
   if (!d.ok){ const e = new Error(d.error || 'Serverfout'); e.server = true; if (/Niet ingelogd/.test(d.error||'')) e.auth = true; throw e; }
   return d;
 }
+let sessionOpen = true, hiddenAt = 0;   // "app geopend" telt één keer per sessie
 async function apiState(){
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 30000);
   try {
-    const url = DATA_ENDPOINT_URL + (DATA_ENDPOINT_URL.includes('?') ? '&' : '?') + 'action=state&id=' + encodeURIComponent(S.player.id) + '&token=' + encodeURIComponent(S.player.token) + '&t=' + Date.now();
+    const url = DATA_ENDPOINT_URL + (DATA_ENDPOINT_URL.includes('?') ? '&' : '?') + 'action=state&id=' + encodeURIComponent(S.player.id) + '&token=' + encodeURIComponent(S.player.token) + (sessionOpen ? '&open=1' : '') + '&t=' + Date.now();
     const res = await fetch(url, { signal:ctrl.signal, redirect:'follow' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const d = await res.json();
     if (!d.ok){ const e = new Error(d.error || 'Serverfout'); e.server = true; if (/Niet ingelogd/.test(d.error||'')) e.auth = true; throw e; }
+    sessionOpen = false;
     return d;
   } finally { clearTimeout(timer); }
 }
@@ -723,6 +742,9 @@ function applyServer(d){
   S.pending = (d.pending || []).map(o => Object.assign({}, o));
   S.snapshots = (d.snapshots || []).slice();
   S.notices = d.notices || [];
+  S.logbook = d.logbook || []; S.visits = d.visits || []; S.photos = d.photos || []; S.visitDates = d.visitDates || {}; S.po = d.po || null;
+  if (c.LOGBOEK){ S.poCfg = { LOGBOEK:c.LOGBOEK, BEZOEKEN:c.BEZOEKEN, VERVANG:c.VERVANG, PERIOD_DAYS:c.PERIOD_DAYS, PERIOD_MIN_TX:c.PERIOD_MIN_TX, PERIOD_MIN_DAYS:c.PERIOD_MIN_DAYS,
+    LOG_GRACE_DAYS:c.LOG_GRACE_DAYS, VISIT_GRACE_DAYS:c.VISIT_GRACE_DAYS, REQUIRE_STARTPLAN:c.REQUIRE_STARTPLAN }; PO.cfg = S.poCfg; }
   applyLive({ quotes:d.quotes || {}, index:d.index });
   S.frozen = d.frozen ? Object.assign({}, d.frozen, {
       transactions: S.transactions.filter(t => t.ts <= d.frozen.frozenAt),
@@ -913,11 +935,12 @@ function render(){
   destroyCharts();
   const m = $('#main');
   if (!S.player){ m.innerHTML = ''; return; }
-  const views = { portfolio:renderPortfolio, market:renderMarket, companies:renderCompanies, transactions:renderTransactions, export:renderExport };
+  const views = { portfolio:renderPortfolio, market:renderMarket, companies:renderCompanies, transactions:renderTransactions, po:renderPO, export:renderExport };
   m.innerHTML = (views[currentTab] || renderPortfolio)();
   if (currentTab === 'portfolio') drawPortfolioCharts();
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === currentTab));
   bindMain();
+  if (currentTab === 'po') bindPO();
 }
 
 function bannersHtml(){
@@ -933,6 +956,12 @@ function bannersHtml(){
     h += `<div class="banner warn"><div class="grow"><b>Simulatiemodus:</b> ${DATA_ENDPOINT_URL ? 'de koersenkoppeling is tijdelijk niet bereikbaar.' : 'er is nog geen koersenkoppeling ingesteld.'} De koersen zijn gesimuleerd en niet echt.</div></div>`;
   } else if (S.source === 'cache'){
     h += `<div class="banner warn"><div class="grow"><b>Geen verbinding met de koersenbron.</b> Je ziet de laatst bekende koersen.</div></div>`;
+  }
+  if (ONLINE && PO.cfg && S.player){
+    if (PO.cfg.REQUIRE_STARTPLAN && !hasStartplan()) h += `<div class="banner warn"><div class="grow"><b>Schrijf eerst je startplan.</b> Daarna kun je handelen.</div><button class="btn ghost small" data-tab-go="po">Naar PO</button></div>`;
+    else (PO.cfg.LOGBOEK || []).filter(m => m.id !== 'start' && logState(m).k === 'open').forEach(m => { h += `<div class="banner info"><div class="grow"><b>${escapeHtml(m.title)}</b> staat open. Inleveren uiterlijk ${fmtKey(dayKeyOf(logLastDay(m)))}.</div><button class="btn ghost small" data-tab-go="po">Schrijven</button></div>`; });
+    const per = S.po?.periods?.find(x => gameDay() >= x.from && gameDay() <= x.to);
+    if (per && !per.ok) h += `<div class="banner info"><div class="grow"><b>Periode ${per.n} (dag ${per.from}–${per.to}):</b> ${per.tx} van ${PO.cfg.PERIOD_MIN_TX} transacties, op ${per.days} van ${PO.cfg.PERIOD_MIN_DAYS} dagen. Nog ${Math.max(0, per.to - gameDay())} dag(en) in deze periode.</div></div>`;
   }
   if (S.frozen){
     h += `<div class="banner ok"><div class="grow"><b>PO-eindstand vastgelegd</b> op ${fmtDate(S.frozen.frozenAt)}: ${fmtEUR(S.frozen.total)} (${fmtPct(S.frozen.retPct)}). Je speelt nu vrijwillig door.</div><button class="btn ghost small" data-tab-go="export">Bekijk</button></div>`;
@@ -1182,10 +1211,11 @@ function renderExport(){
           <div>Aantal transacties</div><div>${f.txCount}</div>
         </div>
         ${f.lateFreeze ? `<p class="small muted">Let op: de app werd na dag ${GAME_DAYS} pas weer geopend, dus de koersen zijn van ${fmtDate(f.frozenAt)}.</p>` : ''}
-        <div class="btn-row" style="margin-top:12px"><button class="btn primary block" data-act="reportFinal">Open PO-rapport (PDF)</button></div>
+        <div class="btn-row" style="margin-top:12px"><button class="btn block" data-act="reportFinal">Open PO-rapport (PDF)</button></div>
       ` : `<p class="muted">Wordt automatisch vastgelegd na het sluiten van de beurs op dag ${GAME_DAYS} (${fmtKey(addDaysKey(S.player.startDate, GAME_DAYS-1))}). Nog ${Math.max(0, GAME_DAYS - gameDay())} dag(en) te gaan.</p>`}
     </div>
   </div>
+  ${ONLINE ? `<div class="card" style="margin-top:12px"><h2>📦 PO-dossier</h2><p class="small muted" style="margin-top:-4px">Eén PDF met je game, motivaties, logboek, bezoeken met foto's en de automatische check. Dit lever je in.</p><button class="btn primary block" data-act="dossier">Maak PO-dossier (PDF)</button></div>` : ''}
   <div class="card" style="margin-top:12px">
     ${ONLINE ? `
     <h2>🔒 Je account (veilig opgeslagen)</h2>
@@ -1205,7 +1235,7 @@ function renderExport(){
       <button class="btn" data-act="backup">Back-up opslaan (.json)</button>
       <button class="btn" data-act="import">Back-up terugzetten</button>
     </div>`}
-    <p class="small muted" style="margin-top:12px">Speler-ID: <b>${escapeHtml(S.player.id)}</b> · Start: ${fmtKey(S.player.startDate)} · ${ONLINE ? 'Servermodus' : 'Lokale modus'} · App-versie 2.0</p>
+    <p class="small muted" style="margin-top:12px">Speler-ID: <b>${escapeHtml(S.player.id)}</b> · Start: ${fmtKey(S.player.startDate)} · ${ONLINE ? 'Servermodus' : 'Lokale modus'} · App-versie 2.2</p>
   </div>`;
 }
 
@@ -1233,7 +1263,8 @@ const actions = {
   backup: () => shareFile(new Blob([JSON.stringify({ app:'AEX Beleggingsgame', exported:new Date().toISOString(), state:S }, null, 2)], { type:'application/json' }), `AEX_Backup_${safeName()}_${ams().key}.json`, 'AEX back-up'),
   import: () => $('#importFile').click(),
   restore: () => restoreDialog(),
-  hideInstall: () => { localStorage.setItem('aexHideInstall','1'); render(); }
+  hideInstall: () => { localStorage.setItem('aexHideInstall','1'); render(); },
+  dossier: () => makeDossier()
 };
 
 function openModal(html, opts={}){
@@ -1278,6 +1309,11 @@ function openCompany(t){
 
 /* ---------- Koop/verkoop-modal ---------- */
 function openTrade(t, side='buy'){
+  if (ONLINE && PO.cfg?.REQUIRE_STARTPLAN && !hasStartplan()){
+    const ov = openModal(`<div class="modal-head"><h2>Eerst je startplan</h2><button class="close-x" data-close>×</button></div><p>Voordat je kunt handelen, schrijf je in het tabblad <b>PO</b> je startplan: welke aandelen je kiest en waarom. Daarna kun je meteen kopen.</p><button class="btn primary block" id="goPlan">Naar mijn startplan</button>`);
+    $('#goPlan', ov).onclick = () => { closeModal(ov); currentTab = 'po'; render(); openLog('start'); };
+    return;
+  }
   if (!ONLINE) checkFreeze();
   const s = stockBy(t);
   const ov = openModal(`
@@ -1605,12 +1641,18 @@ async function buildPdf(d, chartImg){
   await loadPdfLibs();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:'mm', format:'a4' });
+  addReportPages(doc, d, chartImg);
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(120); doc.text(`Pagina ${i} van ${n} · AEX Beleggingsgame`, 105, 290, { align:'center' }); }
+  return doc.output('blob');
+}
+function addReportPages(doc, d, chartImg, titleOverride){
   const clean = s => String(s ?? '').replace(/[  ]/g, ' ');
   const E = n => clean(fmtEUR(n)), SE = n => clean(fmtSignedEUR(n));
   const p = S.player;
   doc.setFillColor(11,27,58); doc.rect(0,0,210,28,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
-  doc.text(clean('AEX Beleggingsgame – ' + d.title), 14, 13);
+  doc.text(clean(titleOverride || ('AEX Beleggingsgame – ' + d.title)), 14, 13);
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
   doc.text(clean(`${p.first} ${p.last} · klas ${p.klas} · speler-ID ${p.id}`), 14, 20);
   doc.text(clean(`Periode: ${d.period} · gemaakt op ${fmtDateTime(d.generated)}`), 14, 25);
@@ -1632,9 +1674,363 @@ async function buildPdf(d, chartImg){
   doc.autoTable({ startY:ny(doc.lastAutoTable.finalY + 6), head:[['Datum','Type','Aandeel','Aantal','Koers','Kosten','Netto','Motivatie']], headStyles:head, styles:{ fontSize:8, cellPadding:1.5 },
     columnStyles:{ 0:{ cellWidth:24 }, 3:{ halign:'right' }, 4:{ halign:'right' }, 5:{ halign:'right' }, 6:{ halign:'right' }, 7:{ cellWidth:55 } },
     body: d.tx.length ? d.tx.map(t => [clean(fmtDateTime(t.ts)), t.type, t.name, String(t.qty), E(t.price), E(t.costs), SE(t.net), clean(t.motivation + (t.note ? ' (' + t.note + ')' : ''))]) : [['Geen transacties in deze periode','','','','','','','']] });
+}
+
+/* =====================================================================
+   PO: LOGBOEK, BEZOEKOPDRACHTEN MET FOTO'S, AUTOMATISCHE CHECK, PO-DOSSIER
+   ===================================================================== */
+const PO = { cfg:null };
+const wordCount = t => String(t || '').trim().split(/\s+/).filter(Boolean).length;
+const dayKeyOf = n => addDaysKey(S.player.startDate, n - 1);
+function logDef(id){ return (PO.cfg?.LOGBOEK || []).find(m => m.id === id); }
+function logEntry(id){ return (S.logbook || []).find(e => e.moment === id); }
+function visitEntry(part){ return (S.visits || []).find(v => v.part === part); }
+function hasStartplan(){ return !!logEntry('start'); }
+function logLastDay(m){ return m.dueDay + (PO.cfg?.LOG_GRACE_DAYS ?? 2); }
+function logState(m){
+  const e = logEntry(m.id), day = gameDay();
+  if (e) return { k:'done', e };
+  if (m.openDay > 0 && day < m.openDay) return { k:'closed' };
+  if (day > logLastDay(m)) return { k:'late' };
+  return { k:'open' };
+}
+// ---- concepten (lokaal) ----
+const DRAFT_KEY = 'aexPoDrafts_v1';
+function drafts(){ try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}'); } catch(e){ return {}; } }
+function saveDraft(key, val){ try { const d = drafts(); d[(S.player?.id || '') + ':' + key] = val; localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch(e){} }
+function getDraft(key){ return drafts()[(S.player?.id || '') + ':' + key]; }
+function clearDraft(key){ try { const d = drafts(); delete d[(S.player?.id || '') + ':' + key]; localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch(e){} }
+// ---- foto-opslag op het apparaat (IndexedDB) ----
+let idbP = null;
+function idb(){
+  if (!idbP) idbP = new Promise((res, rej) => { const r = indexedDB.open('aexPoPhotos', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  return idbP;
+}
+async function idbPut(k, v){ try { const db = await idb(); await new Promise((res, rej) => { const t = db.transaction('p', 'readwrite'); t.objectStore('p').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); } catch(e){ console.warn(e); } }
+async function idbGet(k){ try { const db = await idb(); return await new Promise((res, rej) => { const r = db.transaction('p').objectStore('p').get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); } catch(e){ return null; } }
+async function photoData(id){
+  let d = await idbGet(id);
+  if (d) return d;
+  if (!ONLINE || String(id).startsWith('local-')) return null;
+  try { const r = await api({ action:'photoGet', id:S.player.id, token:S.player.token, photoId:id }); d = 'data:image/jpeg;base64,' + r.data; await idbPut(id, d); return d; } catch(e){ return null; }
+}
+// EXIF-opnamedatum uit een JPEG (als die er is)
+function exifDate(buf){
+  try {
+    const v = new DataView(buf); if (v.getUint16(0) !== 0xFFD8) return '';
+    let o = 2;
+    while (o < v.byteLength - 4){
+      const mk = v.getUint16(o), len = v.getUint16(o + 2);
+      if (mk === 0xFFE1 && v.getUint32(o + 4) === 0x45786966){
+        const t = o + 10, le = v.getUint16(t) === 0x4949, g16 = p => v.getUint16(p, le), g32 = p => v.getUint32(p, le);
+        const find = (ifd, tag) => { const n = g16(t + ifd); for (let i = 0; i < n; i++){ const e = t + ifd + 2 + i * 12; if (g16(e) === tag) return e; } return 0; };
+        const ex = find(g32(t + 4), 0x8769); if (!ex) return '';
+        const d = find(g32(ex + 8), 0x9003); if (!d) return '';
+        const off = t + g32(d + 8); let s = ''; for (let i = 0; i < 19; i++) s += String.fromCharCode(v.getUint8(off + i));
+        const m = s.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}:\d{2}:\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}` : '';
+      }
+      if ((mk & 0xFF00) !== 0xFF00) break;
+      o += 2 + len;
+    }
+  } catch(e){}
+  return '';
+}
+async function compressPhoto(file){
+  const buf = await file.arrayBuffer();
+  const exif = exifDate(buf);
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Kan deze foto niet openen')); i.src = url; });
+    const max = 1400, sc = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    let q = 0.78, data = c.toDataURL('image/jpeg', q);
+    while (data.length > 700000 && q > 0.4){ q -= 0.12; data = c.toDataURL('image/jpeg', q); }
+    return { data, exif, w:c.width, h:c.height };
+  } finally { URL.revokeObjectURL(url); }
+}
+async function uploadPhotoNow(part, task, nr, data, exif){
+  const r = await api({ action:'photo', id:S.player.id, token:S.player.token, part, task, nr, data, exif });
+  await idbPut(r.photoId, data);
+  return r.photoId;
+}
+
+// ---- PO-status (automatische check) ----
+function poStatusHtml(){
+  const po = S.po; if (!po) return '<p class="muted">Ververs de koersen om je PO-status op te halen.</p>';
+  const c = PO.cfg || {};
+  const per = po.periods.map(x => `<tr><td>Periode ${x.n} <span class="muted small">(dag ${x.from}–${x.to})</span></td><td class="num">${x.tx}</td><td class="num">${x.days}</td><td class="num">${x.ok ? '✅' : (gameDay() > x.to ? '❌' : '⏳')}</td></tr>`).join('');
+  return `
+    <p class="small muted" style="margin-top:-4px">Per periode van ${c.PERIOD_DAYS || 10} dagen: minimaal <b>${c.PERIOD_MIN_TX || 5} transacties</b> op minimaal <b>${c.PERIOD_MIN_DAYS || 3} verschillende dagen</b>. Dividend telt niet mee.</p>
+    <div class="table-wrap"><table><thead><tr><th>Periode</th><th class="num">Transacties</th><th class="num">Dagen</th><th class="num">Eis</th></tr></thead><tbody>${per}</tbody></table></div>
+    <div class="kv" style="margin-top:12px">
+      <div>Actieve dagen (app geopend)</div><div><b>${po.activeDays}</b> van ${GAME_DAYS}</div>
+      <div>Punten activiteit (automatisch)</div><div><b>${po.activity}</b> / 10</div>
+    </div>`;
+}
+function statusBadge(k, txt){ const m = { done:'pos', open:'neutral', closed:'', late:'neg' }; return `<span class="badge ${m[k] || ''}" style="font-size:12px;padding:3px 9px">${txt}</span>`; }
+function renderPO(){
+  if (!ONLINE) return `<div class="section-title">PO</div><div class="card"><p>Het PO-gedeelte werkt alleen als de app met de server van je docent verbonden is.</p></div>`;
+  const L = PO.cfg?.LOGBOEK || [], B = PO.cfg?.BEZOEKEN || [];
+  const logRowsH = L.map(m => {
+    const st = logState(m), e = st.e;
+    const last = dayKeyOf(logLastDay(m));
+    let badge, sub, btn;
+    if (st.k === 'done'){ badge = statusBadge(e.onTime ? 'done' : 'late', e.onTime ? 'Ingeleverd' : 'Te laat ingeleverd'); sub = `Ingeleverd op ${fmtDateTime(e.ts)} (dag ${e.day}) · ${e.words} woorden`; btn = `<button class="btn small" data-log="${m.id}">Bekijk</button>`; }
+    else if (st.k === 'closed'){ badge = statusBadge('closed', 'Nog niet open'); sub = `Opent op dag ${m.openDay} (${fmtKey(dayKeyOf(m.openDay))}) · uiterlijk ${fmtKey(last)}`; btn = `<button class="btn small" data-log="${m.id}">Vragen bekijken</button>`; }
+    else if (st.k === 'late'){ badge = statusBadge('late', 'Te laat'); sub = `De inlevertermijn liep tot en met ${fmtKey(last)}. Je kunt het nog inleveren, maar het telt voor 0 punten.`; btn = `<button class="btn small" data-log="${m.id}">Schrijven</button>`; }
+    else { badge = statusBadge('open', 'Nu invullen'); sub = m.openDay ? `Uiterlijk ${fmtKey(last)} (dag ${logLastDay(m)}), 23:59` : `Vóór je eerste transactie, uiterlijk ${fmtKey(last)}`; btn = `<button class="btn primary small" data-log="${m.id}">Schrijven</button>`; }
+    return `<div class="po-row"><div class="grow"><b>${escapeHtml(m.title)}</b> ${badge}<div class="small muted">${sub}</div></div>${btn}</div>`;
+  }).join('');
+  const visitRowsH = B.map(b => {
+    const v = visitEntry(b.id), dates = (S.visitDates || {})[b.id] || [];
+    const dTxt = dates.length ? dates.map(d => (d.replace ? 'vervangend: ' : '') + fmtKey(d.date)).join(', ') : 'nog niet bekend';
+    let badge, sub, btn;
+    if (v){ badge = statusBadge(v.onTime ? 'done' : 'late', v.onTime ? 'Ingeleverd' : 'Te laat ingeleverd'); sub = `${v.replace ? 'Vervangende opdracht · ' : ''}Ingeleverd op ${fmtDateTime(v.ts)}`; btn = `<button class="btn small" data-visit="${b.id}">Bekijk</button>`; }
+    else { badge = statusBadge('open', 'Open'); sub = `Bezoekdatum: ${dTxt} · inleveren uiterlijk ${PO.cfg?.VISIT_GRACE_DAYS ?? 3} dagen na het bezoek`; btn = `<button class="btn primary small" data-visit="${b.id}">Openen</button>`; }
+    return `<div class="po-row"><div class="grow"><b>${escapeHtml(b.title)}</b> ${badge}<div class="small muted">${escapeHtml(b.place)}<br>${sub}</div></div>${btn}</div>`;
+  }).join('');
+  return `
+  <div class="section-title">Praktische opdracht</div>
+  <div class="grid two">
+    <div class="card"><h2>📓 Logboek</h2><p class="small muted" style="margin-top:-4px">Na inleveren liggen je antwoorden met datum en tijd vast op de server. Je kunt ze daarna niet meer wijzigen. Concepten worden op dit apparaat bewaard.</p>${logRowsH}</div>
+    <div class="card"><h2>📸 Bezoeken</h2><p class="small muted" style="margin-top:-4px">Vul de opdrachten in tijdens of direct na het bezoek. Op elke foto staat het codewoord dat je docent ter plekke noemt.</p>${visitRowsH}</div>
+    <div class="card"><h2>✅ Automatische check</h2>${poStatusHtml()}</div>
+    <div class="card"><h2>📦 PO-dossier inleveren</h2>
+      <p class="small">Na dag ${GAME_DAYS} maak je hier één PDF met je game, alle motivaties, je logboek, beide bezoeken met foto's en de automatische check. Die lever je in via Magister (of AirDrop naar je docent).</p>
+      <button class="btn primary block" data-act="dossier">Maak PO-dossier (PDF)</button>
+      <p class="small muted">Je docent ziet alles ook al op de server. De PDF is je inleverbewijs.</p>
+    </div>
+  </div>`;
+}
+function bindPO(){
+  const m = $('#main');
+  m.querySelectorAll('[data-log]').forEach(b => b.onclick = () => openLog(b.dataset.log));
+  m.querySelectorAll('[data-visit]').forEach(b => b.onclick = () => openVisit(b.dataset.visit));
+}
+function earlierLogsHtml(exceptId){
+  return (PO.cfg?.LOGBOEK || []).filter(m => m.id !== exceptId && logEntry(m.id)).map(m => {
+    const e = logEntry(m.id);
+    return `<details class="po-prev"><summary>Lees terug: ${escapeHtml(m.title)} (dag ${e.day})</summary>${m.questions.map((q, i) => `<p><b>${escapeHtml(q.q)}</b><br>${escapeHtml(e.answers[i] || '').replace(/\n/g, '<br>')}</p>`).join('')}</details>`;
+  }).join('');
+}
+function openLog(id){
+  const m = logDef(id); if (!m) return;
+  const st = logState(m);
+  if (st.k === 'done'){
+    const e = st.e;
+    return showMessage(escapeHtml(m.title), `<p class="small muted">Ingeleverd op ${fmtDateTime(e.ts)} (dag ${e.day}) · ${e.onTime ? 'op tijd' : 'te laat'} · ${e.words} woorden</p><p class="small muted">${escapeHtml(e.stand)}</p>` +
+      m.questions.map((q, i) => `<p><b>${i + 1}. ${escapeHtml(q.q)}</b><br>${escapeHtml(e.answers[i] || '').replace(/\n/g, '<br>')}</p>`).join(''));
+  }
+  const c = compute();
+  const dr = getDraft('log:' + id) || [];
+  const canSubmit = st.k === 'open' || st.k === 'late';
+  const ov = openModal(`
+    <div class="modal-head"><h2>${escapeHtml(m.title)}</h2><button class="close-x" data-close aria-label="Sluiten">×</button></div>
+    <p class="small">${escapeHtml(m.intro)}</p>
+    ${st.k === 'closed' ? `<div class="banner info"><div class="grow">Dit onderdeel opent op dag ${m.openDay} (${fmtKey(dayKeyOf(m.openDay))}). Je kunt de vragen alvast lezen en een concept maken.</div></div>` : ''}
+    ${st.k === 'late' ? `<div class="banner warn"><div class="grow">De termijn is verlopen. Inleveren mag nog, maar dit onderdeel telt voor 0 punten.</div></div>` : ''}
+    <div class="calc small"><div class="row"><span>Jouw stand nu (dag ${Math.max(1, gameDay())})</span><b>${fmtEUR(c.total)} (${fmtPct(c.retPct)})</b></div><div class="row"><span>AEX-benchmark</span><b>${fmtPct(c.benchPct)}</b></div><div class="row"><span>Transacties tot nu toe</span><b>${S.transactions.filter(t => t.type !== 'Dividend').length}</b></div></div>
+    ${earlierLogsHtml(id)}
+    ${m.questions.map((q, i) => `
+      <label class="f" for="lq${i}">${i + 1}. ${escapeHtml(q.q)}</label>
+      <div class="hint" style="margin:-2px 0 6px">${escapeHtml(q.hint)}</div>
+      <textarea id="lq${i}" data-min="${q.min}" style="min-height:140px">${escapeHtml(dr[i] || '')}</textarea>
+      <div class="counter" id="lc${i}"></div>`).join('')}
+    <div class="err" id="lErr"></div>
+    <button class="btn primary block" id="lGo" disabled>${canSubmit ? 'Definitief inleveren' : 'Nog niet open'}</button>
+    <p class="small muted">Je concept wordt automatisch op dit apparaat bewaard.</p>`, { wide:true });
+  const tas = m.questions.map((_, i) => $('#lq' + i, ov));
+  const upd = () => {
+    let ok = true, tot = 0;
+    tas.forEach((t, i) => { const w = wordCount(t.value), min = m.questions[i].min; tot += w; if (w < min) ok = false; const el = $('#lc' + i, ov); el.textContent = `${w} / minimaal ${min} woorden`; el.style.color = w >= min ? 'var(--pos)' : ''; });
+    saveDraft('log:' + id, tas.map(t => t.value));
+    $('#lGo', ov).disabled = !(ok && canSubmit);
+  };
+  tas.forEach(t => t.oninput = upd); upd();
+  $('#lGo', ov).onclick = () => {
+    const conf = openModal(`<div class="modal-head"><h2>Definitief inleveren?</h2></div><p>Na inleveren kun je <b>${escapeHtml(m.title)}</b> niet meer wijzigen.</p><div class="btn-row"><button class="btn" data-close style="flex:1">Nog niet</button><button class="btn primary" id="cfYes" style="flex:1">Inleveren</button></div>`);
+    $('#cfYes', conf).onclick = async () => {
+      const b = $('#cfYes', conf); b.disabled = true; b.textContent = 'Bezig…';
+      try {
+        const d = await api({ action:'logbook', id:S.player.id, token:S.player.token, moment:id, answers:tas.map(t => t.value) });
+        applyServer(d); save(); clearDraft('log:' + id); closeModal(conf); closeModal(ov); render(); toast(m.title + ' ingeleverd ✅');
+      } catch(e){ closeModal(conf); $('#lErr', ov).textContent = e.server ? e.message : 'Geen verbinding met de server. Je concept is bewaard; probeer het opnieuw.'; }
+    };
+  };
+}
+
+async function openVisit(part){
+  const b = (PO.cfg?.BEZOEKEN || []).find(x => x.id === part); if (!b) return;
+  const done = visitEntry(part);
+  if (done){
+    const tasks = done.replace ? PO.cfg.VERVANG.tasks : b.tasks;
+    const ov = openModal(`<div class="modal-head"><h2>${escapeHtml(b.title)}</h2><button class="close-x" data-close>×</button></div>
+      <p class="small muted">${done.replace ? 'Vervangende opdracht · ' + escapeHtml(done.location) + ' · ' : ''}Ingeleverd op ${fmtDateTime(done.ts)} · ${done.onTime ? 'op tijd' : 'te laat'} · bezoekdatum ${fmtKey(done.visitDate)}</p>
+      ${tasks.map(t => `<h3>${escapeHtml(t.title)}</h3><div class="po-photos" data-ph="${t.id}"></div><p>${escapeHtml(done.answers[t.id] || '').replace(/\n/g, '<br>')}</p>`).join('')}`, { wide:true });
+    for (const t of tasks){
+      const box = $(`[data-ph="${t.id}"]`, ov);
+      for (const id of (done.photos[t.id] || [])){ const d = await photoData(id); box.insertAdjacentHTML('beforeend', d ? `<img src="${d}" alt="">` : `<div class="po-ph-missing">Foto niet beschikbaar</div>`); }
+    }
+    return;
+  }
+  const key = 'visit:' + part;
+  const dr = Object.assign({ replace:false, location:'', code:'', answers:{}, photos:{} }, getDraft(key) || {});
+  const ov = openModal(`<div class="modal-head"><h2>${escapeHtml(b.title)}</h2><button class="close-x" data-close>×</button></div><div id="vBody"></div>`, { wide:true });
+  const persist = () => saveDraft(key, dr);
+  const draw = async () => {
+    const tasks = dr.replace ? PO.cfg.VERVANG.tasks : b.tasks;
+    const dates = ((S.visitDates || {})[part] || []).filter(d => d.replace === dr.replace);
+    $('#vBody', ov).innerHTML = `
+      <p class="small muted" style="margin-top:-6px">${escapeHtml(b.place)}${dates.length ? ' · bezoekdatum ' + dates.map(d => fmtKey(d.date)).join(', ') : ''} · inleveren uiterlijk ${PO.cfg?.VISIT_GRACE_DAYS ?? 3} dagen na het bezoek</p>
+      <label class="po-check"><input type="checkbox" id="vRep" ${dr.replace ? 'checked' : ''}> Ik was niet bij het bezoek en doe de <b>vervangende opdracht</b></label>
+      ${dr.replace ? `<label class="f" for="vLoc">Locatie (vooraf goedgekeurd door je docent)</label><input class="f" id="vLoc" value="${escapeHtml(dr.location)}" placeholder="bijv. Visafslag IJmuiden">` : ''}
+      ${tasks.map(t => {
+        const ids = dr.photos[t.id] || [];
+        const slots = Math.max(t.photos, Math.min(t.photos + 1, ids.length + 1));
+        return `<div class="card po-task">
+          <h3 style="margin-top:0">${escapeHtml(t.title)}</h3>
+          <p class="small">${escapeHtml(t.instr)}</p>
+          <div class="po-photos">${Array.from({ length:slots }, (_, i) => ids[i]
+            ? `<button class="po-ph" data-rm="${t.id}:${i}" aria-label="Foto verwijderen"><img data-img="${ids[i]}" alt=""><span>${String(ids[i]).startsWith('local-') ? '⏳ nog niet verstuurd' : '✓ opgeslagen'} · tik om te verwijderen</span></button>`
+            : `<label class="po-ph add">📷 Foto ${i + 1}${i >= t.photos ? ' (extra)' : ''}<input type="file" accept="image/*" data-add="${t.id}:${i}" hidden></label>`).join('')}</div>
+          <label class="f" for="va_${t.id}">${escapeHtml(t.q)}</label>
+          <textarea id="va_${t.id}" data-ans="${t.id}" data-min="${t.min}">${escapeHtml(dr.answers[t.id] || '')}</textarea>
+          <div class="counter" data-cnt="${t.id}"></div>
+        </div>`; }).join('')}
+      <label class="f" for="vCode">Codewoord ${dr.replace ? '(persoonlijk codewoord van je docent)' : '(noemt je docent ter plekke)'}</label>
+      <input class="f" id="vCode" value="${escapeHtml(dr.code)}" autocomplete="off" autocapitalize="none">
+      <div class="err" id="vErr"></div>
+      <button class="btn primary block" id="vGo">Definitief inleveren</button>
+      <p class="small muted">Foto's worden direct verkleind en naar de server van je docent gestuurd. Tekst en codewoord worden als concept op dit apparaat bewaard.</p>`;
+    $('#vRep', ov).onchange = e => { dr.replace = e.target.checked; persist(); draw(); };
+    const loc = $('#vLoc', ov); if (loc) loc.oninput = () => { dr.location = loc.value; persist(); };
+    $('#vCode', ov).oninput = e => { dr.code = e.target.value; persist(); };
+    const upd = () => { let ok = true;
+      tasks.forEach(t => { const ta = $('#va_' + t.id, ov), w = wordCount(ta.value); dr.answers[t.id] = ta.value; const el = $(`[data-cnt="${t.id}"]`, ov); el.textContent = `${w} / minimaal ${t.min} woorden`; el.style.color = w >= t.min ? 'var(--pos)' : ''; if (w < t.min || (dr.photos[t.id] || []).length < t.photos) ok = false; });
+      if (dr.replace && dr.location.trim().length < 3) ok = false;
+      if (!dr.code.trim()) ok = false;
+      persist(); $('#vGo', ov).disabled = !ok; };
+    ov.querySelectorAll('[data-ans]').forEach(t => t.oninput = upd);
+    $('#vCode', ov).addEventListener('input', upd); if (loc) loc.addEventListener('input', upd);
+    upd();
+    ov.querySelectorAll('[data-add]').forEach(inp => inp.onchange = async () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const [tid] = inp.dataset.add.split(':');
+      const lab = inp.closest('label'); lab.classList.add('busy'); lab.firstChild.textContent = 'Foto verwerken…';
+      try {
+        const ph = await compressPhoto(f);
+        const nr = (dr.photos[tid] || []).length + 1;
+        let id;
+        try { id = await uploadPhotoNow(part, tid, nr, ph.data, ph.exif); }
+        catch(e){ if (e.server) throw e; id = 'local-' + uid(); await idbPut(id, ph.data); dr.pendingExif = dr.pendingExif || {}; dr.pendingExif[id] = { exif:ph.exif, task:tid, nr }; toast('Geen verbinding: foto bewaard, wordt verstuurd bij inleveren'); }
+        (dr.photos[tid] = dr.photos[tid] || []).push(id); persist();
+      } catch(e){ toast(e.message || 'Foto toevoegen mislukt'); }
+      draw();
+    });
+    ov.querySelectorAll('[data-rm]').forEach(btn => btn.onclick = () => {
+      const [tid, i] = btn.dataset.rm.split(':');
+      const c2 = openModal(`<div class="modal-head"><h2>Foto verwijderen?</h2></div><p>Deze foto wordt uit je opdracht gehaald.</p><div class="btn-row"><button class="btn" data-close style="flex:1">Nee</button><button class="btn sell" id="rmYes" style="flex:1">Verwijderen</button></div>`);
+      $('#rmYes', c2).onclick = () => { dr.photos[tid].splice(Number(i), 1); persist(); closeModal(c2); draw(); };
+    });
+    ov.querySelectorAll('[data-img]').forEach(async im => { const d = await photoData(im.dataset.img); if (d) im.src = d; });
+    $('#vGo', ov).onclick = async () => {
+      const btn = $('#vGo', ov); btn.disabled = true; btn.textContent = 'Bezig met versturen…'; $('#vErr', ov).textContent = '';
+      try {
+        // eerst foto's die nog niet verstuurd zijn
+        for (const t of tasks){
+          const arr = dr.photos[t.id] || [];
+          for (let i = 0; i < arr.length; i++){
+            if (!String(arr[i]).startsWith('local-')) continue;
+            const meta = (dr.pendingExif || {})[arr[i]] || {}, data = await idbGet(arr[i]);
+            if (!data) { arr.splice(i, 1); i--; continue; }
+            arr[i] = await uploadPhotoNow(part, t.id, i + 1, data, meta.exif || ''); persist();
+          }
+        }
+        const photos = {}, answers = {}; tasks.forEach(t => { photos[t.id] = dr.photos[t.id] || []; answers[t.id] = dr.answers[t.id] || ''; });
+        const d = await api({ action:'visit', id:S.player.id, token:S.player.token, part, replace:dr.replace, location:dr.location, code:dr.code, photos, answers });
+        applyServer(d); save(); clearDraft(key); closeModal(ov); render(); toast(b.title + ' ingeleverd ✅');
+      } catch(e){ $('#vErr', ov).textContent = e.server ? e.message : 'Geen verbinding met de server. Alles is bewaard; probeer het opnieuw.'; btn.disabled = false; btn.textContent = 'Definitief inleveren'; }
+    };
+  };
+  draw();
+}
+
+// ---- PO-dossier (één PDF) ----
+const pdfText = s => String(s ?? '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/…/g, '...').replace(/[  ]/g, ' ').replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF€]/g, '');
+async function buildDossier(){
+  await loadPdfLibs();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const p = S.player, po = S.po || {}, cfg = PO.cfg || {};
+  const d = reportData(S.frozen ? 'final' : 'week');
+  if (!S.frozen){ d.tx = S.transactions; d.title = 'Tussenstand (dag ' + Math.max(1, gameDay()) + ')'; }
+  const chartImg = makeChartImage(lineChartConfig(d.snapshots, p.startDate, true), 900, 360);
+  // 1. game (zelfde opmaak als het PO-rapport)
+  addReportPages(doc, d, chartImg, 'PO-dossier – ' + d.title);
+  const head = { fillColor:[37,99,235], textColor:255, fontStyle:'bold' };
+  const L = cfg.LOGBOEK || [];
+  // 2. automatische check
+  doc.addPage();
+  let y = 16;
+  const H = (t, size=14) => { if (y > 270){ doc.addPage(); y = 16; } doc.setFont('helvetica','bold'); doc.setFontSize(size); doc.setTextColor(11,27,58); doc.text(pdfText(t), 14, y); y += size * 0.5; doc.setTextColor(0); };
+  const P = (t, opt={}) => { doc.setFont('helvetica', opt.bold ? 'bold' : 'normal'); doc.setFontSize(opt.size || 10); if (opt.muted) doc.setTextColor(110); const lines = doc.splitTextToSize(pdfText(t), 182);
+    lines.forEach(l => { if (y > 280){ doc.addPage(); y = 16; } doc.text(l, 14, y); y += (opt.size || 10) * 0.45; }); doc.setTextColor(0); y += 1.5; };
+  H('Automatische check');
+  P(`Gemaakt op ${fmtDateTime(new Date())}. Deze check wordt door de server berekend uit het transactielogboek, het logboek en de bezoeken. De inhoud beoordeelt je docent met de rubric.`, { muted:true, size:9 });
+  const st = (e, late) => e ? (e.onTime ? 'op tijd' : 'TE LAAT') : (late ? 'ontbreekt' : 'nog niet ingeleverd');
+  doc.autoTable({ startY:y, head:[['Onderdeel','Status','Details']], headStyles:head, styles:{ fontSize:9 }, columnStyles:{ 2:{ cellWidth:95 } },
+    body:[
+      ...(po.periods || []).map(x => [`Periode ${x.n} (dag ${x.from}-${x.to})`, x.ok ? 'voldaan' : 'niet voldaan', `${x.tx} transacties op ${x.days} dagen (eis: ${cfg.PERIOD_MIN_TX} op ${cfg.PERIOD_MIN_DAYS} dagen) - ${x.pts} pt`]),
+      ['Actieve dagen', String(po.activeDays ?? '-'), `app ${po.opens ?? '-'} keer geopend - ${po.activePts ?? 0} pt`],
+      ['Activiteit totaal', `${po.activity ?? 0} / 10`, 'automatisch berekend'],
+      ...L.map(m => { const e = logEntry(m.id); return [m.title, st(e, gameDay() > logLastDay(m)), e ? `ingeleverd ${fmtDateTime(e.ts)} (dag ${e.day}), ${e.words} woorden` : `uiterlijk ${fmtKey(dayKeyOf(logLastDay(m)))}`]; }),
+      ...(cfg.BEZOEKEN || []).map(b => { const v = visitEntry(b.id); return [b.title, v ? (v.onTime ? 'op tijd' : 'TE LAAT') : 'nog niet ingeleverd', v ? `${v.replace ? 'vervangend (' + v.location + '), ' : ''}ingeleverd ${fmtDateTime(v.ts)}, codewoord juist, foto's ${v.photosOnDay ? 'op bezoekdag' : 'niet op bezoekdag'}` : '']; })
+    ].map(r => r.map(pdfText)) });
+  y = doc.lastAutoTable.finalY + 8;
+  // 3. logboek
+  L.forEach(m => {
+    const e = logEntry(m.id);
+    doc.addPage(); y = 16;
+    H('Logboek - ' + m.title);
+    if (!e){ P('Nog niet ingeleverd.', { muted:true }); return; }
+    P(`Ingeleverd op ${fmtDateTime(e.ts)} (dag ${e.day}) - ${e.onTime ? 'op tijd' : 'TE LAAT'} - ${e.words} woorden`, { muted:true, size:9 });
+    P('Stand bij inleveren: ' + e.stand, { muted:true, size:9 });
+    m.questions.forEach((q, i) => { y += 2; P(`${i + 1}. ${q.q}`, { bold:true }); P(e.answers[i] || ''); });
+  });
+  // 4. bezoeken met foto's
+  for (const b of (cfg.BEZOEKEN || [])){
+    const v = visitEntry(b.id);
+    doc.addPage(); y = 16;
+    H('Bezoek - ' + b.title);
+    if (!v){ P('Nog niet ingeleverd.', { muted:true }); continue; }
+    P(`${v.replace ? 'Vervangende opdracht - locatie: ' + v.location + ' - ' : ''}Bezoekdatum ${fmtKey(v.visitDate)} - ingeleverd op ${fmtDateTime(v.ts)} - ${v.onTime ? 'op tijd' : 'TE LAAT'} - codewoord juist - foto's ${v.photosOnDay ? 'op bezoekdag gemaakt/verstuurd' : 'NIET op bezoekdag'}`, { muted:true, size:9 });
+    const tasks = v.replace ? cfg.VERVANG.tasks : b.tasks;
+    for (const t of tasks){
+      y += 2; P(t.title, { bold:true, size:12 }); P(t.instr, { muted:true, size:9 });
+      for (const id of (v.photos[t.id] || [])){
+        const data = await photoData(id);
+        if (!data){ P('[foto niet beschikbaar op dit apparaat]', { muted:true }); continue; }
+        const dim = await new Promise(res => { const i = new Image(); i.onload = () => res([i.naturalWidth, i.naturalHeight]); i.onerror = () => res([4, 3]); i.src = data; });
+        let w = 120, h = w * dim[1] / dim[0]; if (h > 110){ h = 110; w = h * dim[0] / dim[1]; }
+        if (y + h > 282){ doc.addPage(); y = 16; }
+        doc.addImage(data, 'JPEG', 14, y, w, h); y += h + 4;
+      }
+      P(t.q, { bold:true, size:9 }); P(v.answers[t.id] || '');
+    }
+  }
   const n = doc.getNumberOfPages();
-  for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(120); doc.text(`Pagina ${i} van ${n} · AEX Beleggingsgame`, 105, 290, { align:'center' }); }
+  for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(120); doc.text(pdfText(`${p.first} ${p.last} - ${p.klas} - ${p.id} - PO-dossier - pagina ${i} van ${n}`), 105, 290, { align:'center' }); }
   return doc.output('blob');
+}
+async function makeDossier(){
+  const ov = openModal(`<div class="modal-head"><h2>PO-dossier maken</h2></div><p id="dsMsg">Bezig met maken… Foto's worden opgehaald, dit kan even duren.</p>`, { locked:true });
+  try {
+    if (ONLINE){ try { applyServer(await apiState()); save(); } catch(e){} }
+    const blob = await buildDossier();
+    closeModal(ov);
+    await shareFile(blob, `AEX_PO-dossier_${safeName()}_${S.player.klas.replace(/[^\p{L}\p{N}-]/gu,'')}.pdf`, 'PO-dossier');
+  } catch(e){ closeModal(ov); showMessage('PO-dossier maken mislukt', `<p>${escapeHtml(e.message)}</p>`); }
 }
 
 /* =====================================================================
@@ -1710,6 +2106,7 @@ function tick(){
 function init(){
   makeIcon();
   S = load();
+  PO.cfg = S.poCfg || null;
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => { currentTab = b.dataset.tab; render(); window.scrollTo(0,0); });
   $('#refreshBtn').onclick = () => refreshPrices(true);
@@ -1718,7 +2115,11 @@ function init(){
   if (!S.player) onboarding();
   else refreshPrices();
   setInterval(tick, 30000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden'){ hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt > 10 * 60000 && ONLINE && S?.player?.token){ sessionOpen = true; hiddenAt = 0; refreshPrices(); return; }
+    tick();
+  });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => render());
 }
 init();
