@@ -139,3 +139,31 @@ Alles valt binnen de gratis limieten van Google. Een gewoon Gmail-account kan da
 - Euronext: AEX Equal Weight-samenstelling per 30-09-2026 (29 fondsen) en AEX-factsheet per 30-09-2026
 - Euronext-persberichten over de kwartaalherzieningen: maart 2026 (SBM Offshore in, Randstad uit), juni 2026 (Aalberts in) en september 2026 (geen wijzigingen)
 - Lynx.nl: "AEX van 25 naar 30 aandelen" (uitbreiding per 22-09-2025)
+
+---
+
+## 9. PO-onderdelen in de app (versie 3)
+
+De hele praktische opdracht zit nu in de app, in het tabblad **PO**. Leerlingen leveren uiteindelijk één PDF in: het **PO-dossier**.
+
+**Logboek** (startplan, tussenevaluatie dag 10, tussenevaluatie dag 20, eindreflectie dag 30)
+- Vaste vragen met een minimum aantal woorden per vraag. Startplan minimaal 300 woorden, evaluaties minimaal 200, eindreflectie minimaal 440 (met aparte vragen over de AEX Experience en DNB).
+- Een leerling kan pas handelen als het startplan is ingeleverd (`REQUIRE_STARTPLAN`).
+- Inleveren kan op de inleverdag plus 2 dagen uitloop (`LOG_GRACE_DAYS`). Daarna staat het als **TE LAAT** en telt het voor 0 punten.
+- Na inleveren ligt alles met tijdstempel vast in het tabblad **Logboek**. Wijzigen kan niet meer.
+
+**Bezoekopdrachten** (AEX Experience en DNB, plus een vervangende opdracht)
+- Per bezoek 2 opdrachten met foto's (camera of fotorol) en een korte reflectie.
+- Foto's worden in de app verkleind en opgeslagen in je Google Drive, in de map **"AEX Game – PO-foto's (niet delen)"**. Tabblad **Fotos** laat per foto het uploadtijdstip en, als die er is, de opnamedatum zien.
+- **Codewoorden**: zet vóór het bezoek per onderdeel (aex of dnb) een regel in het tabblad **Codewoorden** met het codewoord en de bezoekdatum. Noem het codewoord pas ter plekke. De server controleert het codewoord bij inleveren.
+- **Vervangende opdracht**: zet een regel met een persoonlijk codewoord, de datum, het speler-ID van de leerling en de locatie.
+- Inleveren kan tot en met 3 dagen na de bezoekdatum (`VISIT_GRACE_DAYS`).
+
+**Automatische check en beoordeling**
+- Per periode van 10 dagen minimaal 5 transacties op minimaal 3 verschillende dagen (`PERIOD_MIN_TX`, `PERIOD_MIN_DAYS`). De server telt ook de **actieve dagen** (dagen waarop de app is geopend).
+- Tabblad **Beoordeling** (wordt elke avond en via het menu *AEX Game > Beoordeling bijwerken* bijgewerkt):
+  - De blauwe kolommen vult het script: activiteit (automatisch, maximaal 10 punten), status van elk onderdeel (op tijd, te laat of ontbreekt) en een voorstel voor de bewijspunten per bezoek.
+  - De gele kolommen vul jij in met de rubric. Laat je de bewijskolom leeg, dan telt het voorstel.
+  - Totaal en cijfer rekenen zichzelf uit. Te laat of ontbrekend telt automatisch voor 0 punten.
+
+**Installeren van versie 3:** plak het nieuwe script, voer **`setup`** één keer uit en geef Google toestemming voor **Drive** (nieuw, voor de foto's). Kies daarna *Implementeren > Implementaties beheren > potlood > Nieuwe versie*. Bestaande gegevens blijven staan.
