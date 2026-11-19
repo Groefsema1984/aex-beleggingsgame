@@ -48,19 +48,28 @@ Zodra de server-URL in de app staat, draait de app in **servermodus**:
 - **Geen internet?** Een order wordt dan op de iPad bewaard en automatisch verstuurd zodra er weer verbinding is. De server bepaalt dan de koers.
 - **Docentenoverzicht.** Elke 5 minuten verwerkt het script orders. Na sluiting van de beurs (17:35) maakt het per leerling een dagstand (tabblad *Snapshots*) en een ranglijst (tabblad *Overzicht*). Op dag 30 na 17:35 legt het de **PO-eindstand** vast in tabblad *Eindstand*. Die verandert daarna niet meer, ook niet als de leerling doorspeelt. Via het menu **AEX Game > Overzicht bijwerken** kun je de ranglijst ook tussentijds vernieuwen.
 
+### Dividend (versie 2.1)
+
+- In het tabblad **Dividenden** zet je per uitkering één regel: ticker (zoals in Koersen, bijvoorbeeld `SHELL.AS`), aandeel, ex-datum (`2027-02-12`) en het **bruto** bedrag per aandeel in euro. Dollarbedragen reken je zelf om.
+- Op de ex-datum keert het script automatisch uit aan iedere leerling die het aandeel **de dag ervoor** had. Dat bezit bepaalt het script uit het onuitwisbare transactielogboek, dus niet uit iets wat de iPad doorgeeft.
+- Standaard wordt **15% dividendbelasting** ingehouden, net als in het echt. Wil je bruto uitkeren, zet dan in `CFG` `DIVIDEND_TAX_PCT: 0`.
+- De leerling ziet een melding, een transactie van het type *Dividend* (de ingehouden belasting staat bij kosten) en het totaal onder *Gerealiseerd*. In *Overzicht* staat een kolom Dividend.
+- Kolom E (*Verwerkt op*) vult het script zelf in. Daardoor wordt een regel nooit twee keer uitgekeerd. Een onbekende ticker krijgt daar de melding "Onbekende ticker".
+- Let op: op de ex-datum daalt de koers meestal ongeveer met het dividend. Een leerling wordt er dus niet "gratis" rijker van. Dat is een mooi leerpunt voor het verslag.
+
 ## 4. Stappenplan: server installeren (ongeveer 15 minuten, gratis)
 
 1. Ga naar **sheets.google.com** en maak een nieuwe, lege spreadsheet. Noem hem bijvoorbeeld "AEX Game – server". **Deel deze spreadsheet met niemand.**
 2. Ga naar **Extensies > Apps Script**. Verwijder de voorbeeldcode en plak de volledige inhoud van `koersen-apps-script.gs`. Klik op Opslaan (diskette-icoon).
 3. Pas eventueel de instellingen bovenaan (`CFG`) aan, bijvoorbeeld `FIXED_START_DATE: '2026-11-23'`.
 4. Kies bovenin de functie **`setup`** en klik op **Uitvoeren**. Google vraagt om toestemming. Kies je account, dan *Geavanceerd > Ga naar (projectnaam) (onveilig)* en vervolgens *Toestaan*. Die waarschuwing is normaal voor een script dat je zelf hebt gemaakt.
-5. In de spreadsheet staan nu de tabbladen Koersen, Spelers, Orders, Transacties, Snapshots, Eindstand en Overzicht. Wacht ongeveer een minuut tot de koersen verschijnen. Blijft een koers leeg, verander dan in kolom B de code. Gebruik bijvoorbeeld `EBR:WDP` in plaats van `AMS:WDP`, of zoek de juiste code op google.com/finance.
+5. In de spreadsheet staan nu de tabbladen Koersen, Spelers, Orders, Transacties, Snapshots, Eindstand, Overzicht en Dividenden. Wacht ongeveer een minuut tot de koersen verschijnen. Blijft een koers leeg, verander dan in kolom B de code. Gebruik bijvoorbeeld `EBR:WDP` in plaats van `AMS:WDP`, of zoek de juiste code op google.com/finance.
 6. Ga in Apps Script naar **Implementeren > Nieuwe implementatie** > tandwiel > **Web-app**.
    - Uitvoeren als: **Ikzelf**
    - Wie heeft toegang: **Iedereen**
    - Klik op **Implementeren** en kopieer de **web-app-URL** (die eindigt op `/exec`).
 7. Stuur mij die URL. Ik zet hem in de app en zet de nieuwe versie online. Wil je het zelf doen: open `index.html` en vul de URL in bij `const DATA_ENDPOINT_URL = "…";`.
-8. Wijzig je later het script, kies dan **Implementeren > Implementaties beheren > potlood > Versie: Nieuwe versie**. Zo blijft de URL hetzelfde.
+8. Wijzig je later het script: plak de nieuwe code, sla op, voer **`setup`** één keer uit (bestaande gegevens blijven staan) en kies **Implementeren > Implementaties beheren > potlood > Versie: Nieuwe versie > Implementeren**. Zo blijft de URL hetzelfde.
 
 Alles valt binnen de gratis limieten van Google. Een gewoon Gmail-account kan dagelijks ruim 1,5 uur scriptrekentijd gebruiken, en dit spel gebruikt voor een klas maar een fractie daarvan.
 
@@ -116,7 +125,7 @@ Alles valt binnen de gratis limieten van Google. Een gewoon Gmail-account kan da
 2. **Laat leerlingen vooraf een beleggingsplan schrijven**: risicoprofiel, gekozen sectoren en een maximum per aandeel. Laat ze in het eindverslag reflecteren op het verschil tussen plan en uitvoering. Dat levert meer op dan alleen naar het rendement kijken.
 3. **Beoordeel niet (alleen) op rendement.** In 30 dagen is rendement vooral geluk. Beoordeel ook de kwaliteit van de motivaties, de spreiding en de reflectie. Anders beloon je gokgedrag, zoals alles in één aandeel stoppen.
 4. **Overweeg spreidingsregels**, zoals maximaal 30% in één aandeel of minimaal 3 sectoren. Die kan ik als waarschuwing of harde regel inbouwen.
-5. **Dividend** wordt nu niet meegenomen. Over 30 dagen is het effect klein, maar het is een mooi begrip voor in het verslag. Ik kan uitkeringen op de ex-dividenddatum toevoegen.
+5. **Dividend** zit er nu in (zie hoofdstuk 3). In de meeste 30-dagenperiodes valt er weinig of geen ex-datum. De meeste AEX-bedrijven keren uit tussen februari en mei en tussen augustus en november. Check vóór de start op de beleggerssites van de bedrijven of er een ex-datum in jouw periode valt.
 
 **Technisch / organisatorisch**
 

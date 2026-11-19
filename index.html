@@ -297,7 +297,7 @@ const AEX_STOCKS = [
   { ticker:"SHELL.AS", gf:"AMS:SHELL", name:"Shell",                sector:"Energie",                    sim:31,   color:"#d4a106" },
   { ticker:"UMG.AS",   gf:"AMS:UMG",   name:"Universal Music Group",sector:"Media & entertainment",      sim:23,   color:"#111827" },
   { ticker:"UNA.AS",   gf:"AMS:UNA",   name:"Unilever",             sector:"Consumentengoederen",        sim:52,   color:"#1f36c7" },
-  { ticker:"WDP.AS",   gf:"AMS:WDP",   name:"WDP (Warehouses De Pauw)", sector:"Vastgoed",               sim:22,   color:"#b91c1c" },
+  { ticker:"WDP.AS",   gf:"EBR:WDP",   name:"WDP (Warehouses De Pauw)", sector:"Vastgoed",               sim:22,   color:"#b91c1c" },
   { ticker:"WKL.AS",   gf:"AMS:WKL",   name:"Wolters Kluwer",       sector:"Zakelijke informatie",       sim:110,  color:"#0e7c86" }
 ];
 
@@ -425,6 +425,7 @@ const COMPANY_INFO = {
 const INFO_TIPS = {
   gak: { title:"Gemiddelde aankoopkoers (GAK)", text:"De gemiddelde prijs die je per aandeel hebt betaald. Koop je 10 aandelen voor € 20 en later 10 voor € 30, dan is je GAK € 25. Je vergelijkt de actuele koers met je GAK om te zien of je op een aandeel winst of verlies staat. (In deze game tellen de transactiekosten niet mee in de GAK; die zie je apart.)" },
   realized: { title:"Gerealiseerd vs. ongerealiseerd rendement", text:"Ongerealiseerd = winst of verlies 'op papier' op aandelen die je nog hebt: (actuele koers − GAK) × aantal. Het kan nog alle kanten op. Gerealiseerd = winst of verlies dat vastligt omdat je aandelen hebt verkocht: (verkoopkoers − GAK) × aantal." },
+  dividend: { title:"Dividend", text:"Sommige bedrijven delen een deel van hun winst uit aan hun aandeelhouders: dividend. Had je het aandeel op de dag vóór de ex-dividenddatum, dan krijg je een bedrag per aandeel op je cash. Net als in het echt houdt de game meestal dividendbelasting in (in Nederland 15%). Let op: op de ex-datum daalt de koers meestal ongeveer met het dividendbedrag, dus je wordt er niet 'gratis' rijker van. In je transacties zie je het als type Dividend; in de kolom kosten staat de ingehouden belasting." },
   costs: { title:"Transactiekosten", text:"Elke keer dat je koopt of verkoopt, betaal je de broker kosten: hier € " + COST_FIXED.toFixed(2).replace('.',',') + " vast + " + String(COST_PERCENT).replace('.',',') + "% van de orderwaarde. Veel kleine transacties zijn dus duur: bij een order van € 100 betaal je al ruim 2% kosten. Kosten gaan direct van je rendement af." },
   sector: { title:"Sectorspreiding", text:"Spreiden betekent je geld verdelen over verschillende bedrijven en sectoren (zoals technologie, banken, energie). Als één sector het slecht doet, word je dan niet meteen hard geraakt. 'Niet al je eieren in één mand' is een gouden regel bij beleggen." },
   benchmark: { title:"AEX-benchmark", text:"Een benchmark is een maatstaf om je resultaat mee te vergelijken. Hier: wat zou je € " + START_CAPITAL.toLocaleString('nl-NL') + " waard zijn als je op dag 1 alles in de AEX-index had gestopt? Doe je het beter dan de AEX, dan 'versla je de markt'. Het verschil zie je in procentpunten (pp)." },
@@ -716,6 +717,7 @@ function applyServer(d){
   const known = new Set(S.transactions.map(t => t.id));
   S.player = Object.assign({}, d.player);
   S.cash = Number(d.cash); S.realized = Number(d.realized) || 0; S.totalCosts = Number(d.totalCosts) || 0;
+  S.dividends = Number(d.dividends) || 0; if (d.dividendTaxPct !== undefined) S.dividendTaxPct = Number(d.dividendTaxPct);
   S.positions = d.positions || {}; S.startIdx = d.startIdx || null;
   S.transactions = d.transactions || [];
   S.pending = (d.pending || []).map(o => Object.assign({}, o));
@@ -727,10 +729,12 @@ function applyServer(d){
       snapshots: S.snapshots.filter(x => x.date <= d.frozen.endDate) }) : null;
   // meldingen: nieuw uitgevoerde orders, afgewezen orders, bevroren eindstand
   const msgs = [];
-  if (hadPlayer) S.transactions.filter(t => !known.has(t.id)).forEach(t => msgs.push(`${t.type} ${t.qty}× ${t.name} uitgevoerd à ${fmtEUR(t.price)}${t.note ? ' (' + t.note + ')' : ''}`));
+  if (hadPlayer) S.transactions.filter(t => !known.has(t.id)).forEach(t => msgs.push(t.type === 'Dividend'
+    ? `Dividend ontvangen: ${t.qty}× ${t.name}, ${fmtEUR(t.price)} per aandeel = ${fmtEUR(t.net)} netto${t.note ? ' (' + t.note + ')' : ''}`
+    : `${t.type} ${t.qty}× ${t.name} uitgevoerd à ${fmtEUR(t.price)}${t.note ? ' (' + t.note + ')' : ''}`));
   S.seenNotices = S.seenNotices || [];
   S.notices.filter(n => !S.seenNotices.includes(n.id)).forEach(n => { const st = stockBy(n.ticker); msgs.push(`Order ${n.qty}× ${st ? st.name : n.ticker} afgewezen: ${n.note}`); S.seenNotices.push(n.id); });
-  if (msgs.length) setTimeout(() => showMessage('Je orders', '<ul>' + msgs.map(m => `<li>${escapeHtml(m)}</li>`).join('') + '</ul>'), 300);
+  if (msgs.length) setTimeout(() => showMessage('Nieuw in je portefeuille', '<ul>' + msgs.map(m => `<li>${escapeHtml(m)}</li>`).join('') + '</ul>'), 300);
   if (S.frozen && !S.frozenSeen){ S.frozenSeen = true; setTimeout(() => showMessage('🎉 PO-eindstand vastgelegd', `<p>Dag ${GAME_DAYS} is voorbij. Je eindstand is <b>bevroren</b> op de server vastgelegd: ${fmtEUR(S.frozen.total)} (${fmtPct(S.frozen.retPct)}).</p><p>Je mag vrijwillig doorspelen; de eindstand verandert niet meer.</p>`), 600); }
 }
 let flushing = false;
@@ -980,7 +984,7 @@ function renderPortfolio(){
     </div>
     <div class="card kpi"><div class="label">Vrij cash</div><div class="value">${fmtEUR(c.cashFree)}</div><div class="sub">${c.reserved > 0 ? 'Geblokkeerd: ' + fmtEUR(c.reserved) : (c.total ? fmtNum(S.cash / c.total * 100, 1) + '% van portefeuille' : '')}</div></div>
     <div class="card kpi"><div class="label">Dagresultaat ${infoBtn('dayresult')}</div><div class="value ${cls(c.dayRes)}">${fmtSignedEUR(c.dayRes)}</div><div class="sub">${fmtPct(c.dayRes / Math.max(1, c.total - c.dayRes) * 100)}</div></div>
-    <div class="card kpi"><div class="label">Gerealiseerd ${infoBtn('realized')}</div><div class="value ${cls(c.realized)}">${fmtSignedEUR(c.realized)}</div><div class="sub">winst/verlies op verkopen</div></div>
+    <div class="card kpi"><div class="label">Gerealiseerd ${infoBtn('realized')}</div><div class="value ${cls(c.realized)}">${fmtSignedEUR(c.realized)}</div><div class="sub">winst/verlies op verkopen${S.dividends ? `<br>+ ${fmtEUR(S.dividends)} dividend ontvangen ${infoBtn('dividend')}` : ''}</div></div>
     <div class="card kpi"><div class="label">Ongerealiseerd ${infoBtn('realized')}</div><div class="value ${cls(c.unrealized)}">${fmtSignedEUR(c.unrealized)}</div><div class="sub">op huidige posities</div></div>
     <div class="card kpi"><div class="label">Transactiekosten ${infoBtn('costs')}</div><div class="value">${fmtEUR(c.costs)}</div><div class="sub">${S.transactions.length} transactie(s)</div></div>
     <div class="card kpi"><div class="label">AEX-benchmark ${infoBtn('benchmark')}</div><div class="value">${fmtEUR(c.benchValue)}</div><div class="sub ${cls(c.benchPct)}">${fmtPct(c.benchPct)}</div></div>
@@ -1133,7 +1137,7 @@ function renderTransactions(){
   const rows = tx.map(t => `
     <tr>
       <td class="small" style="white-space:nowrap">${fmtDateTime(t.ts)}</td>
-      <td><span class="badge ${t.type==='Koop'?'neutral':'neg'}" style="font-size:12px;padding:3px 9px">${t.type}</span></td>
+      <td><span class="badge ${t.type==='Koop'?'neutral':t.type==='Dividend'?'pos':'neg'}" style="font-size:12px;padding:3px 9px">${t.type}</span></td>
       <td><b>${escapeHtml(t.name)}</b><br><span class="muted small">${t.ticker}</span></td>
       <td class="num">${t.qty}</td>
       <td class="num">${fmtEUR(t.price)}</td>
@@ -1437,6 +1441,7 @@ function buildCSV(){
   row('Dagresultaat (€)', csvNum(c.dayRes));
   row('Gerealiseerd resultaat (€)', csvNum(c.realized));
   row('Ongerealiseerd resultaat (€)', csvNum(c.unrealized));
+  row('Ontvangen dividend netto (€)', csvNum(S.dividends || 0));
   row('Totaal betaalde transactiekosten (€)', csvNum(c.costs));
   row('Aantal transacties', S.transactions.length);
   row('');

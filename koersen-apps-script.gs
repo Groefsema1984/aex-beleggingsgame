@@ -29,6 +29,7 @@ const CFG = {
   MIN_DELAY_MIN: 2,              // minimaal zoveel minuten na inleggen
   MAX_WAIT_MIN: 30,              // als de koerstijd onbekend is: uiterlijk zoveel min na inleggen/opening
   MAX_ORDERS_PER_DAY: 40,
+  DIVIDEND_TAX_PCT: 15,          // dividendbelasting in % (0 = leerlingen krijgen het brutobedrag)
   MAX_RESTORE_FAILS: 10
 };
 
@@ -61,23 +62,24 @@ const TICKERS = [
   ['SHELL.AS','AMS:SHELL','Shell','Energie'],
   ['UMG.AS','AMS:UMG','Universal Music Group','Media & entertainment'],
   ['UNA.AS','AMS:UNA','Unilever','Consumentengoederen'],
-  ['WDP.AS','AMS:WDP','WDP (Warehouses De Pauw)','Vastgoed'],
+  ['WDP.AS','EBR:WDP','WDP (Warehouses De Pauw)','Vastgoed'],
   ['WKL.AS','AMS:WKL','Wolters Kluwer','Zakelijke informatie']
 ];
 const INDEX = ['^AEX', 'INDEXEURO:AEX'];
 const TZ = 'Europe/Amsterdam';
 
 /* ------------------------------- TABBLADEN ------------------------------- */
-const SH = { K:'Koersen', P:'Spelers', O:'Orders', T:'Transacties', S:'Snapshots', E:'Eindstand', R:'Overzicht' };
+const SH = { K:'Koersen', P:'Spelers', O:'Orders', T:'Transacties', S:'Snapshots', E:'Eindstand', R:'Overzicht', D:'Dividenden' };
 const HEAD = {
-  P: ['Speler-ID','Voornaam','Achternaam','Klas','Startdatum','Einddatum','Herstelcode','Token','Aangemeld','Cash','Gerealiseerd','Kosten','Posities (JSON)','AEX bij start','Bevroren','Mislukte herstelpogingen','Laatste activiteit'],
+  P: ['Speler-ID','Voornaam','Achternaam','Klas','Startdatum','Einddatum','Herstelcode','Token','Aangemeld','Cash','Gerealiseerd','Kosten','Posities (JSON)','AEX bij start','Bevroren','Mislukte herstelpogingen','Laatste activiteit','Dividend netto'],
   O: ['Order-ID','Client-ID','Speler-ID','Ingelegd','Kant','Ticker','Aantal','Motivatie','Geblokkeerd','Indicatiekoers','Status','Afgehandeld','Koers','Opmerking'],
   T: ['Transactie-ID','Order-ID','Speler-ID','Naam','Klas','Tijd','Type','Ticker','Aandeel','Aantal','Koers','Orderwaarde','Kosten','Netto','Gerealiseerd','Cash na','Motivatie','Koerstijd','Opmerking'],
   S: ['Datum','Speler-ID','Naam','Klas','Waarde','AEX-benchmark','Rendement %','AEX %'],
+  D: ['Ticker','Aandeel','Ex-datum (jjjj-mm-dd)','Bruto dividend per aandeel (€)','Verwerkt op'],
   E: ['Speler-ID','Naam','Klas','Vastgelegd op','Einddatum','Eindwaarde','Rendement %','AEX %','Verschil (pp)','Kosten','Aantal transacties','Data (JSON)']
 };
 // kolomnummers Spelers (1-based)
-const PC = { id:1, first:2, last:3, klas:4, start:5, end:6, code:7, token:8, created:9, cash:10, realized:11, costs:12, pos:13, startIdx:14, frozen:15, fails:16, last:17 };
+const PC = { id:1, first:2, last:3, klas:4, start:5, end:6, code:7, token:8, created:9, cash:10, realized:11, costs:12, pos:13, startIdx:14, frozen:15, fails:16, last:17, div:18 };
 
 /* ------------------------------- SETUP ------------------------------- */
 function setup() {
@@ -122,6 +124,17 @@ function setup() {
     if (p.canDomainEdit()) p.setDomainEdit(false);
   });
   if (!ss.getSheetByName(SH.R)) ss.insertSheet(SH.R);
+  // Spelers: kolom voor dividend (ook bij een bestaande Sheet)
+  ss.getSheetByName(SH.P).getRange(1, PC.div).setValue(HEAD.P[PC.div - 1]).setFontWeight('bold');
+  // Dividenden: hier vul je (of ik) ex-datum en bedrag in. Niet beveiligd, zodat je het zelf kunt aanvullen.
+  let dv = ss.getSheetByName(SH.D);
+  if (!dv) {
+    dv = ss.insertSheet(SH.D);
+    dv.getRange(1, 1, 1, HEAD.D.length).setValues([HEAD.D]).setFontWeight('bold');
+    dv.setFrozenRows(1);
+    dv.getRange('A:A').setNumberFormat('@'); dv.getRange('C:C').setNumberFormat('@'); dv.getRange('E:E').setNumberFormat('@');
+    dv.getRange(1, 7, 6, 1).setValues([['Uitleg'],['1 regel per dividend. Ticker zoals in Koersen (bijv. SHELL.AS).'],['Ex-datum als 2027-02-12 (of 12-02-2027).'],['Bedrag in euro per aandeel (bruto). Bij dollars: omrekenen.'],['Het script keert uit aan iedereen die het aandeel de dag vóór de ex-datum had.'],['Kolom E vult het script zelf in. Niet aanpassen.']]);
+  }
   // Trigger: elke 5 minuten orders verwerken, standen maken, eindstanden bevriezen
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'processAll') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('processAll').timeBased().everyMinutes(5).create();
@@ -131,7 +144,7 @@ function setup() {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('AEX Game')
     .addItem('Overzicht bijwerken', 'updateOverzicht')
-    .addItem('Orders nu verwerken', 'processAll')
+    .addItem('Orders en dividend nu verwerken', 'processAll')
     .addToUi();
 }
 
@@ -224,7 +237,7 @@ function rowToPlayer(r, rowNum) {
   let pos = {}; try { pos = JSON.parse(r[PC.pos - 1] || '{}'); } catch (e) {}
   return { row:rowNum, id:String(r[0]), first:String(r[1]), last:String(r[2]), klas:String(r[3]), startDate:keyOf(r[4]), endDate:keyOf(r[5]),
     code:String(r[6]), token:String(r[7]), created:isoOf(r[8]), cash:Number(r[9]), realized:Number(r[10]) || 0, costs:Number(r[11]) || 0,
-    positions:pos, startIdx:Number(r[13]) || null, frozen:String(r[14]) === 'ja', fails:Number(r[15]) || 0 };
+    positions:pos, startIdx:Number(r[13]) || null, frozen:String(r[14]) === 'ja', fails:Number(r[15]) || 0, dividends:Number(r[17]) || 0 };
 }
 function findPlayer(id) {
   const rows = allRows('P');
@@ -233,8 +246,8 @@ function findPlayer(id) {
 }
 function savePlayer(p) {
   const s = sheet('P');
-  s.getRange(p.row, PC.cash, 1, 8).setValues([[ round2(p.cash), round2(p.realized), round2(p.costs), JSON.stringify(p.positions),
-    p.startIdx || '', p.frozen ? 'ja' : 'nee', p.fails || 0, new Date().toISOString() ]]);
+  s.getRange(p.row, PC.cash, 1, 9).setValues([[ round2(p.cash), round2(p.realized), round2(p.costs), JSON.stringify(p.positions),
+    p.startIdx || '', p.frozen ? 'ja' : 'nee', p.fails || 0, new Date().toISOString(), round2(p.dividends || 0) ]]);
 }
 function auth(req) {
   const p = findPlayer(req.id);
@@ -259,7 +272,7 @@ function register(req) {
   const start = CFG.FIXED_START_DATE || ams().key;
   const q = readQuotes();
   appendRow('P', [id, first, last, klas, start, addDaysKey(start, CFG.GAME_DAYS - 1), code, token, new Date().toISOString(),
-    CFG.START_CAPITAL, 0, 0, '{}', (q.index && q.index.price) || '', 'nee', 0, new Date().toISOString()]);
+    CFG.START_CAPITAL, 0, 0, '{}', (q.index && q.index.price) || '', 'nee', 0, new Date().toISOString(), 0]);
   return stateResponse(id, token);
 }
 
@@ -400,6 +413,7 @@ function processAll() {
   if (!lock.tryLock(20000)) return;
   try {
     processOrders(false);
+    processDividends();
     const now = new Date(), a = ams(now);
     const rows = allRows('P');
     if (!rows.length) return;
@@ -419,7 +433,7 @@ function processAll() {
         const txCount = allRows('T').filter(t => String(t[2]) === p.id).length;
         const data = { frozenAt:now.toISOString(), endDate:p.endDate, lateFreeze:a.key > addDaysKey(p.endDate, 1), total:round2(val.total), cash:round2(p.cash),
           stockValue:round2(val.stockValue), ret:round2(val.ret), retPct:val.retPct, benchValue:round2(val.benchValue), benchPct:val.benchPct, diffPP:val.diffPP,
-          realized:round2(p.realized), unrealized:round2(val.unrealized), costs:round2(p.costs), sectors:val.sectors, positions:val.positions, txCount:txCount };
+          realized:round2(p.realized), unrealized:round2(val.unrealized), costs:round2(p.costs), dividends:round2(p.dividends || 0), sectors:val.sectors, positions:val.positions, txCount:txCount };
         appendRow('E', [p.id, p.first + ' ' + p.last, p.klas, now.toISOString(), p.endDate, round2(val.total), round2(val.retPct), round2(val.benchPct), round2(val.diffPP), round2(p.costs), txCount, JSON.stringify(data)]);
         p.frozen = true; dirty = true;
       }
@@ -427,6 +441,46 @@ function processAll() {
     });
     if (doSnap) { props.setProperty('snap', a.key); updateOverzicht(); }
   } finally { lock.releaseLock(); }
+}
+
+/* ------------------------------- DIVIDEND ------------------------------- */
+function num(v) { if (typeof v === 'number') return v; const n = Number(String(v || '').replace(/\s/g, '').replace(',', '.')); return isFinite(n) ? n : 0; }
+function processDividends() {
+  const dv = sheet('D'); if (!dv || dv.getLastRow() < 2) return 0;
+  const today = ams().key;
+  const rows = dv.getRange(2, 1, dv.getLastRow() - 1, 5).getValues();
+  let done = 0;
+  rows.forEach((r, i) => {
+    const ticker = String(r[0] || '').trim().toUpperCase(), amount = num(r[3]);
+    let ex = keyOf(r[2]).trim(); const nl = ex.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);   // ook 12-02-2027 mag
+    if (nl) ex = nl[3] + '-' + ('0' + nl[2]).slice(-2) + '-' + ('0' + nl[1]).slice(-2);
+    if (!ticker || !/^\d{4}-\d{2}-\d{2}$/.test(ex) || !(amount > 0) || String(r[4] || '') !== '' || ex > today) return;
+    const t = tick(ticker);
+    if (!t) { dv.getRange(i + 2, 5).setValue('Onbekende ticker'); return; }
+    // bezit per speler op de dag vóór de ex-datum, opgebouwd uit het onuitwisbare transactielogboek
+    const held = {};
+    allRows('T').forEach(x => {
+      if (String(x[7]) !== ticker) return;
+      if (keyOf(new Date(isoOf(x[5]))) >= ex) return;
+      const q = Number(x[9]) || 0, pid = String(x[2]);
+      if (String(x[6]) === 'Koop') held[pid] = (held[pid] || 0) + q;
+      else if (String(x[6]) === 'Verkoop') held[pid] = (held[pid] || 0) - q;
+    });
+    let count = 0;
+    Object.keys(held).forEach(pid => {
+      const qty = held[pid]; if (qty <= 0) return;
+      const p = findPlayer(pid); if (!p) return;
+      const gross = round2(qty * amount), tax = round2(gross * CFG.DIVIDEND_TAX_PCT / 100), net = round2(gross - tax);
+      p.cash = round2(p.cash + net); p.dividends = round2((p.dividends || 0) + net);
+      savePlayer(p);
+      appendRow('T', ['T-' + Utilities.getUuid().slice(0, 13), 'DIV-' + ex, p.id, p.first + ' ' + p.last, p.klas, new Date().toISOString(), 'Dividend', ticker, t[2], qty, amount, gross, tax, net, 0, p.cash,
+        'Dividenduitkering (ex-datum ' + ex + ')', '', CFG.DIVIDEND_TAX_PCT ? CFG.DIVIDEND_TAX_PCT + '% dividendbelasting ingehouden' : '']);
+      count++;
+    });
+    dv.getRange(i + 2, 5).setValue(new Date().toISOString() + ' · ' + count + ' leerling(en)');
+    done++;
+  });
+  return done;
 }
 
 /* ------------------------------- DOCENTENOVERZICHT ------------------------------- */
@@ -438,12 +492,12 @@ function updateOverzicht() {
     const p = rowToPlayer(r, i + 2), v = valuation(p, qd), f = frozen[p.id];
     const day = Math.round((Date.parse(a.key) - Date.parse(p.startDate)) / 86400000) + 1;
     return [p.first + ' ' + p.last, p.klas, p.id, p.code, p.startDate, day > CFG.GAME_DAYS ? 'klaar (' + day + ')' : day,
-      round2(v.total), round2(v.retPct), round2(v.benchPct), round2(v.diffPP), round2(p.costs), tx.filter(t => String(t[2]) === p.id).length,
+      round2(v.total), round2(v.retPct), round2(v.benchPct), round2(v.diffPP), round2(p.costs), round2(p.dividends || 0), tx.filter(t => String(t[2]) === p.id && String(t[6]) !== 'Dividend').length,
       f ? Number(f[5]) : '', f ? Number(f[6]) : '', f ? Number(f[8]) : ''];
-  }).sort((x, y) => (y[13] === '' ? y[7] : y[13]) - (x[13] === '' ? x[7] : x[13]));
+  }).sort((x, y) => (y[14] === '' ? y[7] : y[14]) - (x[14] === '' ? x[7] : x[14]));
   const sh = sheet('R'); sh.clear();
   sh.getRange(1, 1, 1, 2).setValues([['Bijgewerkt', Utilities.formatDate(new Date(), TZ, 'dd-MM-yyyy HH:mm')]]);
-  const head = ['#','Naam','Klas','Speler-ID','Herstelcode','Start','Dag','Waarde nu (€)','Rendement %','AEX %','Verschil pp','Kosten (€)','Transacties','PO-eindwaarde (€)','PO-rendement %','PO-verschil pp'];
+  const head = ['#','Naam','Klas','Speler-ID','Herstelcode','Start','Dag','Waarde nu (€)','Rendement %','AEX %','Verschil pp','Kosten (€)','Dividend (€)','Transacties','PO-eindwaarde (€)','PO-rendement %','PO-verschil pp'];
   sh.getRange(3, 1, 1, head.length).setValues([head]).setFontWeight('bold');
   if (list.length) sh.getRange(4, 1, list.length, head.length).setValues(list.map((r, i) => [i + 1].concat(r)));
   sh.setFrozenRows(3);
@@ -470,7 +524,7 @@ function stateResponse(id, token, newOrderId) {
     config:{ START_CAPITAL:CFG.START_CAPITAL, COST_FIXED:CFG.COST_FIXED, COST_PERCENT:CFG.COST_PERCENT, GAME_DAYS:CFG.GAME_DAYS, MIN_MOTIVATION:CFG.MIN_MOTIVATION,
       STRICT_EURONEXT_HOURS:CFG.STRICT_EURONEXT_HOURS, PENDING_RESERVE_BUFFER:CFG.PENDING_RESERVE_BUFFER, MAX_WAIT_MIN:CFG.MAX_WAIT_MIN },
     player:{ id:p.id, first:p.first, last:p.last, klas:p.klas, startDate:p.startDate, endDate:p.endDate, code:p.code, token:p.token, createdAt:p.created },
-    cash:p.cash, realized:p.realized, totalCosts:p.costs, positions:p.positions, startIdx:p.startIdx,
+    cash:p.cash, realized:p.realized, totalCosts:p.costs, dividends:p.dividends || 0, dividendTaxPct:CFG.DIVIDEND_TAX_PCT, positions:p.positions, startIdx:p.startIdx,
     transactions:transactions, pending:pending, notices:notices, snapshots:snapshots, frozen:frozen,
     quotes:qd.quotes, index:qd.index, updated:qd.updated };
 }
