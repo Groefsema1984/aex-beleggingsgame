@@ -2,8 +2,8 @@
 
 Bestanden in deze map:
 
-- `aex-beleggingsgame.html`: de complete app in één bestand
-- `koersen-apps-script.gs`: het Google Apps Script voor de koersen
+- `index.html` (in Drive: `aex-beleggingsgame.html`): de complete app in één bestand
+- `koersen-apps-script.gs`: de server (Google Apps Script). Die levert de koersen, voert orders uit, bewaart alles centraal en maakt het docentenoverzicht.
 - dit document: stappenplan voor de koppeling, online zetten en advies
 
 ---
@@ -42,30 +42,40 @@ Wil je dit helemaal dichttimmeren, dan is de beste aanvulling: **orders altijd u
 
 ---
 
-## 3. Stappenplan: koersenkoppeling (ongeveer 15 minuten)
+## 3. Fraudebestendig en niets kwijtraken: zo werkt het (versie 2)
 
-1. Ga naar **sheets.google.com** en maak een nieuwe, lege spreadsheet. Noem hem bijvoorbeeld "AEX koersen". Gebruik bij voorkeur een schoolaccount of een apart Google-account.
-2. Ga naar **Bestand > Instellingen** en zet de tijdzone op *(GMT+01:00) Amsterdam*. Klik op Opslaan.
-3. Ga naar **Extensies > Apps Script**. Verwijder de voorbeeldcode en plak de volledige inhoud van `koersen-apps-script.gs`. Klik op het diskette-icoon (Opslaan).
-4. Kies bovenin in het keuzemenu de functie **`setup`** en klik op **Uitvoeren**. Google vraagt om toestemming. Kies je account, dan *Geavanceerd > Ga naar (projectnaam)* en vervolgens *Toestaan*.
-5. Ga terug naar de spreadsheet. Er staat nu een tabblad **"Koersen"** met 30 regels (de AEX-index en 29 aandelen). Wacht ongeveer een minuut tot de koersen verschijnen.
-   - Blijft een cel leeg, dan kent Google die code niet. Verander in kolom B bijvoorbeeld `AMS:WDP` in `EBR:WDP` (WDP noteert ook in Brussel), of controleer de code op google.com/finance.
-   - De app gaat netjes om met een ontbrekende koers: dat aandeel krijgt het label "geen actuele koers" en handelen erin wordt tijdelijk geblokkeerd.
-6. Ga in Apps Script naar **Implementeren > Nieuwe implementatie**. Klik op het tandwiel en kies **Web-app**.
-   - Beschrijving: "AEX koersen"
+Zodra de server-URL in de app staat, draait de app in **servermodus**:
+
+- **De server is de bank.** De iPad stuurt alleen "ik wil 10 ASML kopen, omdat …". Het Apps Script controleert alles zelf: is er genoeg cash, heeft de leerling de aandelen echt, is het een heel aantal, is de motivatie lang genoeg? Het voert de order uit tegen de koers uit **jouw** Google Sheet. Saldo, koers of aantal vervalsen op de iPad heeft geen effect: bij de volgende verversing overschrijft de server alles.
+- **Geen voordeel van vertraagde koersen.** Een order wordt pas uitgevoerd tegen een koers die **ná** het inleggen tot stand kwam. Dat gebeurt meestal binnen 30 minuten (instelling `MAX_WAIT_MIN`). Wie op een andere app ziet dat ASML net is gestegen, kan dus niet meer tegen de oude koers kopen.
+- **Onuitwisbaar logboek.** Iedere transactie komt als nieuwe regel in het tabblad **Transacties**, met tijd, koers, koerstijd, kosten en motivatie. De tabbladen zijn beveiligd, zodat alleen jij en het script ze kunnen wijzigen. Leerlingen hebben geen toegang tot de Sheet.
+- **Niets kwijt.** Bij aanmelden krijgt iedere leerling een **speler-ID** en een **herstelcode** van 6 cijfers. Die staan in de app onder *Inleveren* en in jouw tabblad *Overzicht*. Is een iPad kwijt of de app verwijderd, dan kiest de leerling "Herstel je account" en is alles terug. Na 10 foute pogingen wordt herstellen geblokkeerd. Je geeft het weer vrij door in *Spelers* de kolom "Mislukte herstelpogingen" op 0 te zetten.
+- **Geen internet?** Een order wordt dan op de iPad bewaard en automatisch verstuurd zodra er weer verbinding is. De server bepaalt dan de koers.
+- **Docentenoverzicht.** Elke 5 minuten verwerkt het script orders. Na sluiting van de beurs (17:35) maakt het per leerling een dagstand (tabblad *Snapshots*) en een ranglijst (tabblad *Overzicht*). Op dag 30 na 17:35 legt het de **PO-eindstand** vast in tabblad *Eindstand*. Die verandert daarna niet meer, ook niet als de leerling doorspeelt. Via het menu **AEX Game > Overzicht bijwerken** kun je de ranglijst ook tussentijds vernieuwen.
+
+## 4. Stappenplan: server installeren (ongeveer 15 minuten, gratis)
+
+1. Ga naar **sheets.google.com** en maak een nieuwe, lege spreadsheet. Noem hem bijvoorbeeld "AEX Game – server". **Deel deze spreadsheet met niemand.**
+2. Ga naar **Extensies > Apps Script**. Verwijder de voorbeeldcode en plak de volledige inhoud van `koersen-apps-script.gs`. Klik op Opslaan (diskette-icoon).
+3. Pas eventueel de instellingen bovenaan (`CFG`) aan, bijvoorbeeld `FIXED_START_DATE: '2026-11-23'`.
+4. Kies bovenin de functie **`setup`** en klik op **Uitvoeren**. Google vraagt om toestemming. Kies je account, dan *Geavanceerd > Ga naar (projectnaam) (onveilig)* en vervolgens *Toestaan*. Die waarschuwing is normaal voor een script dat je zelf hebt gemaakt.
+5. In de spreadsheet staan nu de tabbladen Koersen, Spelers, Orders, Transacties, Snapshots, Eindstand en Overzicht. Wacht ongeveer een minuut tot de koersen verschijnen. Blijft een koers leeg, verander dan in kolom B de code. Gebruik bijvoorbeeld `EBR:WDP` in plaats van `AMS:WDP`, of zoek de juiste code op google.com/finance.
+6. Ga in Apps Script naar **Implementeren > Nieuwe implementatie** > tandwiel > **Web-app**.
    - Uitvoeren als: **Ikzelf**
-   - Wie heeft toegang: **Iedereen** (dus ook zonder inloggen; nodig voor de iPads van leerlingen)
+   - Wie heeft toegang: **Iedereen**
    - Klik op **Implementeren** en kopieer de **web-app-URL** (die eindigt op `/exec`).
-7. Test de URL in je browser. Je ziet dan JSON met `"ok":true` en de koersen.
-8. Open `aex-beleggingsgame.html` in een teksteditor en vul bovenaan de URL in:
-   `const DATA_ENDPOINT_URL = "https://script.google.com/macros/s/…/exec";`
-9. Wijzig je later het script, kies dan **Implementeren > Implementaties beheren > potlood > Versie: Nieuwe versie**. Zo blijft de URL hetzelfde.
+7. Stuur mij die URL. Ik zet hem in de app en zet de nieuwe versie online. Wil je het zelf doen: open `index.html` en vul de URL in bij `const DATA_ENDPOINT_URL = "…";`.
+8. Wijzig je later het script, kies dan **Implementeren > Implementaties beheren > potlood > Versie: Nieuwe versie**. Zo blijft de URL hetzelfde.
 
-Het script cachet de koersen 60 seconden. Ook bij een volle klas die tegelijk ververst blijft het daardoor ruim binnen de gratis limieten van Google.
+Alles valt binnen de gratis limieten van Google. Een gewoon Gmail-account kan dagelijks ruim 1,5 uur scriptrekentijd gebruiken, en dit spel gebruikt voor een klas maar een fractie daarvan.
 
-## 4. Stappenplan: online zetten
+> **Test eerst zelf.** Meld je in de app aan als testleerling en leg een order in tijdens beurstijd. Binnen ongeveer 30 minuten verschijnt die in het tabblad Transacties. Gooi de testregels daarna weg, of maak een nieuwe spreadsheet voor de echte klas.
 
-**Netlify (snelst):**
+## 5. Online zetten
+
+**Huidige link (GitHub Pages, gratis):** https://groefsema1984.github.io/aex-beleggingsgame/
+
+**Alternatief, Netlify:**
 1. Hernoem het bestand naar `index.html` en zet het in een lege map.
 2. Ga naar **app.netlify.com/drop** en sleep de map erin. Je krijgt meteen een link. Maak gratis een account aan, anders verdwijnt de site na een tijd.
 3. Via *Site configuration > Change site name* kies je een nette naam, bijvoorbeeld `aex-game-jouwschool.netlify.app`.
@@ -79,11 +89,11 @@ Het script cachet de koersen 60 seconden. Ook bij een volle klas die tegelijk ve
 
 > Let op: op iPad bewaart de app op het beginscherm zijn gegevens **apart** van Safari. Begint een leerling in Safari en zet hij de app daarna op het beginscherm, dan begint hij opnieuw. De app geeft hier zelf een tip over. Een back-up terugzetten lost het ook op.
 
-## 5. Instellingen in de app (bovenaan het script)
+## 6. Instellingen in de app (bovenaan het HTML-bestand)
 
 | Constante | Standaard | Betekenis |
 |---|---|---|
-| `DATA_ENDPOINT_URL` | `""` | URL van je Apps Script. Leeg = simulatiemodus |
+| `DATA_ENDPOINT_URL` | `""` | URL van je Apps Script. Leeg = simulatiemodus (alles alleen op de iPad, om te testen). Ingevuld = servermodus. In servermodus gelden de instellingen uit `CFG` in het script. |
 | `STRICT_EURONEXT_HOURS` | `true` | Buiten beurstijd worden orders lopende orders. `false` = direct tegen slotkoers |
 | `START_CAPITAL` | 10000 | Startkapitaal |
 | `COST_FIXED` / `COST_PERCENT` | 2,00 / 0,10 | Transactiekosten |
@@ -94,7 +104,7 @@ Het script cachet de koersen 60 seconden. Ook bij een volle klas die tegelijk ve
 
 ---
 
-## 6. Wat ik heb toegevoegd ten opzichte van je opdracht
+## 7. Wat ik heb toegevoegd ten opzichte van je opdracht
 
 - **Tabblad "Bedrijven"** met per AEX-fonds: wat het bedrijf doet, bekende producten en merken, waarom het belangrijk is, en waar je als belegger op let. De tekst is geschreven voor bovenbouwleerlingen en ingedeeld per sector. Vanuit de beurslijst tik je ook direct op een bedrijf.
 - **Euronext-feestdagen**: Nieuwjaar, Goede Vrijdag, Tweede Paasdag, 1 mei en beide Kerstdagen worden herkend. Op 24 en 31 december sluit de beurs om 14:05.
@@ -103,7 +113,7 @@ Het script cachet de koersen 60 seconden. Ook bij een volle klas die tegelijk ve
 - **PDF-rapport als echt PDF-bestand** (via jsPDF), dat leerlingen direct kunnen AirDroppen, plus een printversie als reserve.
 - **Kosten als percentage van de order** in het orderscherm, zodat leerlingen zien dat kleine orders relatief duur zijn.
 
-## 7. Advies voor verbeteringen (als app-ontwikkelaar en beleggingsspecialist)
+## 8. Advies voor verbeteringen (als app-ontwikkelaar en beleggingsspecialist)
 
 **Didactisch**
 
@@ -115,9 +125,9 @@ Het script cachet de koersen 60 seconden. Ook bij een volle klas die tegelijk ve
 
 **Technisch / organisatorisch**
 
-6. **Klassenoverzicht voor de docent.** Nu staan alle gegevens alleen op de iPad van de leerling (localStorage). Leerlingen kunnen daar in theorie mee knoeien, en jij ziet pas iets als ze inleveren. Met een kleine uitbreiding van hetzelfde Apps Script kan de app de dagelijkse stand automatisch naar een Google Sheet van de docent sturen. Dan heb je een live ranglijst en een controle-exemplaar van elke portefeuille. **Dit is mijn belangrijkste aanbeveling.**
+6. **Klassenoverzicht**: dit zit nu in de server (zie hoofdstuk 3).
 7. **Back-ups**: laat leerlingen elke week naast de CSV ook een back-up (.json) maken. Safari kan websitegegevens wissen als een site lang niet gebruikt is. Voor apps op het beginscherm geldt dat in de praktijk niet, maar een back-up is een goede verzekering.
-8. **Privacy (AVG)**: de app verstuurt geen leerlinggegevens. Alles blijft op de iPad, en het koersenscript ontvangt alleen een verzoek om koersen. Kies je voor punt 6, dan gaan namen naar een Google-account van school. Stem dat af met je privacyfunctionaris.
+8. **Privacy (AVG)**: in servermodus komen naam, klas en transacties van leerlingen in jouw Google Sheet. Gebruik bij voorkeur een Google-account van school, en stem dit kort af met je privacyfunctionaris. Er staan geen leerlinggegevens op GitHub.
 9. **Test de koppeling vóór de start.** Gaat de klas eerst in simulatiemodus van start en zet je later de koppeling aan, dan springen de koersen van simulatie naar echt. Dat geeft scheve resultaten.
 
 ## Bronnen samenstelling AEX

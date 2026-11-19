@@ -240,22 +240,27 @@ input.f{width:100%;min-height:48px;border-radius:12px;border:1px solid var(--bor
    CONFIGURATIE  –  pas hier alles aan wat je als docent wilt wijzigen
    ===================================================================== */
 
-// URL van je Google Apps Script web-app (zie stappenplan). Leeg = simulatiemodus.
+// URL van je Google Apps Script web-app (zie stappenplan). Leeg = simulatiemodus (alles alleen op dit apparaat, om te testen).
+// Ingevuld = SERVERMODUS: de server voert alle orders uit en bewaart alles centraal (fraudebestendig).
 const DATA_ENDPOINT_URL = "";
+const ONLINE = !!DATA_ENDPOINT_URL;
 
 // true  = buiten beurstijd worden orders "lopend" en pas bij opening uitgevoerd
 // false = buiten beurstijd direct uitgevoerd tegen de laatste slotkoers
-const STRICT_EURONEXT_HOURS = true;
+let STRICT_EURONEXT_HOURS = true;
 
-const START_CAPITAL      = 10000.00;  // startkapitaal in euro
-const COST_FIXED         = 2.00;      // vaste transactiekosten per order (€)
-const COST_PERCENT       = 0.10;      // variabele kosten in % van de orderwaarde
-const GAME_DAYS          = 30;        // lengte van de PO in kalenderdagen
-const MIN_MOTIVATION     = 10;        // minimaal aantal tekens motivatie
+let START_CAPITAL      = 10000.00;  // startkapitaal in euro
+let COST_FIXED         = 2.00;      // vaste transactiekosten per order (€)
+let COST_PERCENT       = 0.10;      // variabele kosten in % van de orderwaarde
+let GAME_DAYS          = 30;        // lengte van de PO in kalenderdagen
+let MIN_MOTIVATION     = 10;        // minimaal aantal tekens motivatie
 const REFRESH_INTERVAL_MIN = 60;      // automatisch verversen (minuten)
-const PENDING_RESERVE_BUFFER = 0.05;  // extra cash geblokkeerd bij lopende kooporders (koers kan stijgen)
+const PENDING_REFRESH_MIN = 5;        // zolang er orders openstaan: elke X minuten de server bevragen
+let MAX_WAIT_MIN = 30;                // (servermodus) uiterlijke wachttijd op een verse koers
+let PENDING_RESERVE_BUFFER = 0.05;  // extra cash geblokkeerd bij lopende kooporders (koers kan stijgen)
 const PENDING_EXEC_DELAY_MIN = 20;    // lopende orders pas X min na opening uitvoeren (gratis koersen lopen ~15-20 min achter)
 
+// In servermodus gelden de instellingen uit het Apps Script (die overschrijven de waarden hierboven).
 // Optioneel: vaste startdatum voor de hele klas (bijv. "2026-11-23"). null = dag van onboarding.
 const FIXED_START_DATE = null;
 
@@ -493,7 +498,7 @@ function defaultState(){
   return { version:1, player:null, cash:START_CAPITAL, positions:{}, transactions:[], pending:[],
     prices:{}, index:null, source:'sim', lastUpdate:null, quoteTime:null, lastRefreshWasOpen:false,
     bench:{ value:START_CAPITAL, lastIdx:null, lastSrc:null }, snapshots:[], realized:0, totalCosts:0,
-    frozen:null, sim:{ lastTs:null, dayKey:null }, liveCount:0 };
+    frozen:null, sim:{ lastTs:null, dayKey:null }, liveCount:0, outbox:[], notices:[], seenNotices:[], startIdx:null, frozenSeen:false };
 }
 function load(){
   try { const raw = localStorage.getItem(STORAGE_KEY); if (raw){ const s = JSON.parse(raw); return Object.assign(defaultState(), s); } } catch(e){ console.warn(e); }
@@ -502,9 +507,9 @@ function load(){
 function save(){ try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e){ toast('Opslaan mislukt: ' + e.message); } }
 
 function priceOf(t){ return S.prices[t]?.price ?? stockBy(t)?.sim ?? 0; }
-function reservedCash(){ return round2(S.pending.filter(o => o.side==='buy').reduce((a,o) => a + o.reserve, 0)); }
+function reservedCash(){ return round2([...S.pending, ...(S.outbox||[])].filter(o => o.side==='buy').reduce((a,o) => a + o.reserve, 0)); }
 function freeCash(){ return round2(S.cash - reservedCash()); }
-function pendingSellQty(t){ return S.pending.filter(o => o.side==='sell' && o.ticker===t).reduce((a,o) => a + o.qty, 0); }
+function pendingSellQty(t){ return [...S.pending, ...(S.outbox||[])].filter(o => o.side==='sell' && o.ticker===t).reduce((a,o) => a + o.qty, 0); }
 
 function gameDay(){
   if (!S.player) return 0;
@@ -629,7 +634,13 @@ async function refreshPrices(manual = false){
   const now = new Date();
   let src = 'sim';
   try {
-    if (DATA_ENDPOINT_URL){
+    if (ONLINE && S.player?.token){
+      await flushOutbox();
+      const d = await apiState();
+      applyServer(d);
+      src = 'live';
+      S.liveCount++;
+    } else if (DATA_ENDPOINT_URL){
       const data = await fetchLive();
       const ok = applyLive(data);
       if (ok < AEX_STOCKS.length / 2) throw new Error('Te weinig koersen ontvangen (' + ok + ')');
@@ -640,14 +651,17 @@ async function refreshPrices(manual = false){
     }
   } catch(e){
     console.warn('Live koersen niet beschikbaar:', e);
-    if (Object.keys(S.prices).length && S.source !== 'sim' && S.liveCount > 0){
+    if (e && e.auth){ refreshing = false; $('#refreshBtn').classList.remove('spin'); restoreDialog('Je account op dit apparaat is niet (meer) geldig. Herstel het met je speler-ID en herstelcode.'); return; }
+    if (ONLINE && Object.keys(S.prices).length){ src = 'cache'; }
+    else if (Object.keys(S.prices).length && S.source !== 'sim' && S.liveCount > 0){
       src = 'cache';  // laatst bekende live koersen blijven staan
     } else { simulate(now); src = 'sim'; }
     if (manual) toast(DATA_ENDPOINT_URL ? 'Koppeling niet bereikbaar – laatst bekende koersen gebruikt' : 'Simulatiemodus: er is nog geen koersenkoppeling ingesteld');
   }
   // benchmark doorrekenen (keten-index: geen sprong bij wisseling van bron)
   const effSrc = src === 'cache' ? 'live' : src;
-  if (S.index && S.index.price > 0){
+  if (ONLINE){ S.bench.value = (S.index?.price && S.startIdx) ? START_CAPITAL * S.index.price / S.startIdx : START_CAPITAL; }
+  else if (S.index && S.index.price > 0){
     if (S.bench.lastIdx && S.bench.lastSrc === effSrc){ S.bench.value = S.bench.value * (S.index.price / S.bench.lastIdx); }
     S.bench.lastIdx = S.index.price; S.bench.lastSrc = effSrc;
   }
@@ -655,14 +669,112 @@ async function refreshPrices(manual = false){
   S.lastUpdate = now.toISOString();
   const ms = marketState(now);
   S.lastRefreshWasOpen = ms.open;
-  executePending();
-  checkFreeze();
+  if (!ONLINE){ executePending(); checkFreeze(); }
   updateSnapshot();
   save();
   refreshing = false;
   $('#refreshBtn').classList.remove('spin');
   render();
   if (manual && src !== 'sim' && src !== 'cache') toast('Koersen ververst');
+}
+
+/* =====================================================================
+   SERVERMODUS (fraudebestendig): communicatie met het Apps Script
+   ===================================================================== */
+async function api(payload){
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 30000);
+  let res;
+  try { res = await fetch(DATA_ENDPOINT_URL, { method:'POST', body:JSON.stringify(payload), redirect:'follow', signal:ctrl.signal }); }
+  finally { clearTimeout(timer); }
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const d = await res.json();
+  if (!d.ok){ const e = new Error(d.error || 'Serverfout'); e.server = true; if (/Niet ingelogd/.test(d.error||'')) e.auth = true; throw e; }
+  return d;
+}
+async function apiState(){
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const url = DATA_ENDPOINT_URL + (DATA_ENDPOINT_URL.includes('?') ? '&' : '?') + 'action=state&id=' + encodeURIComponent(S.player.id) + '&token=' + encodeURIComponent(S.player.token) + '&t=' + Date.now();
+    const res = await fetch(url, { signal:ctrl.signal, redirect:'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    if (!d.ok){ const e = new Error(d.error || 'Serverfout'); e.server = true; if (/Niet ingelogd/.test(d.error||'')) e.auth = true; throw e; }
+    return d;
+  } finally { clearTimeout(timer); }
+}
+function applyServer(d){
+  const c = d.config || {};
+  if (c.START_CAPITAL) START_CAPITAL = c.START_CAPITAL;
+  if (c.COST_FIXED !== undefined) COST_FIXED = c.COST_FIXED;
+  if (c.COST_PERCENT !== undefined) COST_PERCENT = c.COST_PERCENT;
+  if (c.GAME_DAYS) GAME_DAYS = c.GAME_DAYS;
+  if (c.MIN_MOTIVATION) MIN_MOTIVATION = c.MIN_MOTIVATION;
+  if (c.STRICT_EURONEXT_HOURS !== undefined) STRICT_EURONEXT_HOURS = c.STRICT_EURONEXT_HOURS;
+  if (c.PENDING_RESERVE_BUFFER !== undefined) PENDING_RESERVE_BUFFER = c.PENDING_RESERVE_BUFFER;
+  if (c.MAX_WAIT_MIN) MAX_WAIT_MIN = c.MAX_WAIT_MIN;
+  const hadPlayer = !!S.player && S.transactions.length >= 0 && S.liveCount > 0;
+  const known = new Set(S.transactions.map(t => t.id));
+  S.player = Object.assign({}, d.player);
+  S.cash = Number(d.cash); S.realized = Number(d.realized) || 0; S.totalCosts = Number(d.totalCosts) || 0;
+  S.positions = d.positions || {}; S.startIdx = d.startIdx || null;
+  S.transactions = d.transactions || [];
+  S.pending = (d.pending || []).map(o => Object.assign({}, o));
+  S.snapshots = (d.snapshots || []).slice();
+  S.notices = d.notices || [];
+  applyLive({ quotes:d.quotes || {}, index:d.index });
+  S.frozen = d.frozen ? Object.assign({}, d.frozen, {
+      transactions: S.transactions.filter(t => t.ts <= d.frozen.frozenAt),
+      snapshots: S.snapshots.filter(x => x.date <= d.frozen.endDate) }) : null;
+  // meldingen: nieuw uitgevoerde orders, afgewezen orders, bevroren eindstand
+  const msgs = [];
+  if (hadPlayer) S.transactions.filter(t => !known.has(t.id)).forEach(t => msgs.push(`${t.type} ${t.qty}× ${t.name} uitgevoerd à ${fmtEUR(t.price)}${t.note ? ' (' + t.note + ')' : ''}`));
+  S.seenNotices = S.seenNotices || [];
+  S.notices.filter(n => !S.seenNotices.includes(n.id)).forEach(n => { const st = stockBy(n.ticker); msgs.push(`Order ${n.qty}× ${st ? st.name : n.ticker} afgewezen: ${n.note}`); S.seenNotices.push(n.id); });
+  if (msgs.length) setTimeout(() => showMessage('Je orders', '<ul>' + msgs.map(m => `<li>${escapeHtml(m)}</li>`).join('') + '</ul>'), 300);
+  if (S.frozen && !S.frozenSeen){ S.frozenSeen = true; setTimeout(() => showMessage('🎉 PO-eindstand vastgelegd', `<p>Dag ${GAME_DAYS} is voorbij. Je eindstand is <b>bevroren</b> op de server vastgelegd: ${fmtEUR(S.frozen.total)} (${fmtPct(S.frozen.retPct)}).</p><p>Je mag vrijwillig doorspelen; de eindstand verandert niet meer.</p>`), 600); }
+}
+let flushing = false;
+async function flushOutbox(){
+  if (!ONLINE || !S.player?.token || flushing || !(S.outbox||[]).length) return true;
+  flushing = true;
+  try {
+    while (S.outbox.length){
+      const o = S.outbox[0];
+      try {
+        const d = await api({ action:'order', id:S.player.id, token:S.player.token, clientId:o.clientId, ticker:o.ticker, side:o.side, qty:o.qty, motivation:o.motivation });
+        S.outbox.shift(); applyServer(d); save();
+      } catch(e){
+        if (e.server){ S.outbox.shift(); save(); if (e.auth) throw e; showMessage('Order niet geaccepteerd', `<p>${escapeHtml(o.qty + '× ' + o.name)}: ${escapeHtml(e.message)}</p>`); }
+        else { return false; }   // geen verbinding: later opnieuw
+      }
+    }
+    return true;
+  } finally { flushing = false; }
+}
+window.addEventListener('online', () => { if (ONLINE && S?.player) refreshPrices(); });
+
+function restoreDialog(intro){
+  const ov = openModal(`
+    <div class="modal-head"><h2>Account herstellen</h2></div>
+    <p>${escapeHtml(intro || 'Vul je speler-ID en herstelcode in. Die staan in je app onder Inleveren, en je docent heeft ze ook.')}</p>
+    <label class="f" for="rsId">Speler-ID</label><input class="f" id="rsId" placeholder="AEX-ABC-123" autocapitalize="characters" autocomplete="off">
+    <label class="f" for="rsCode">Herstelcode (6 cijfers)</label><input class="f" id="rsCode" inputmode="numeric" autocomplete="off">
+    <div class="err" id="rsErr"></div>
+    <button class="btn primary block" id="rsGo">Herstellen</button>
+    ${S.player ? '' : '<button class="btn ghost block" id="rsNew" style="margin-top:8px">Terug: nieuw account aanmaken</button>'}
+  `, { locked:true });
+  const nb = $('#rsNew', ov); if (nb) nb.onclick = () => { closeModal(ov); onboarding(); };
+  $('#rsGo', ov).onclick = async () => {
+    const btn = $('#rsGo', ov); btn.disabled = true; btn.textContent = 'Bezig…'; $('#rsErr', ov).textContent = '';
+    try {
+      const d = await api({ action:'restore', id:$('#rsId', ov).value.trim().toUpperCase(), code:$('#rsCode', ov).value.trim() });
+      const keepOutbox = [];
+      S = defaultState(); S.outbox = keepOutbox; S.frozenSeen = true; S.seenNotices = (d.notices||[]).map(n => n.id);
+      applyServer(d); S.source = 'live'; S.lastUpdate = new Date().toISOString(); updateSnapshot(); save();
+      closeModal(ov); render(); toast('Account hersteld – al je gegevens zijn terug');
+    } catch(e){ $('#rsErr', ov).textContent = e.server ? e.message : 'Geen verbinding met de server. Probeer het opnieuw.'; }
+    btn.disabled = false; btn.textContent = 'Herstellen';
+  };
 }
 
 /* ---------- Snapshots (grafiek) ---------- */
@@ -810,6 +922,9 @@ function bannersHtml(){
   if (isIOS && !window.navigator.standalone && !localStorage.getItem('aexHideInstall')){
     h += `<div class="banner info"><div class="grow"><b>Tip:</b> tik in Safari op het deel-icoon en kies <b>"Zet op beginscherm"</b>. Doe dit vóórdat je begint: de app op je beginscherm bewaart zijn gegevens apart van Safari.</div><button class="btn ghost small" data-act="hideInstall">Verberg</button></div>`;
   }
+  if (ONLINE && (S.outbox||[]).length){
+    h += `<div class="banner warn"><div class="grow"><b>${S.outbox.length} order(s) nog niet verstuurd</b> – er is geen verbinding met de server. Ze worden automatisch verstuurd zodra er internet is.</div></div>`;
+  }
   if (S.source === 'sim'){
     h += `<div class="banner warn"><div class="grow"><b>Simulatiemodus:</b> ${DATA_ENDPOINT_URL ? 'de koersenkoppeling is tijdelijk niet bereikbaar.' : 'er is nog geen koersenkoppeling ingesteld.'} De koersen zijn gesimuleerd en niet echt.</div></div>`;
   } else if (S.source === 'cache'){
@@ -839,9 +954,10 @@ function renderPortfolio(){
     </tr>`).join('');
   if (!posRows) posRows = `<tr><td colspan="8" class="empty">Je hebt nog geen aandelen. Ga naar <b>AEX-beurs</b> om je eerste aandeel te kopen.</td></tr>`;
 
-  const pend = S.pending.map(o => `
+  const pendAll = [...S.pending, ...(S.outbox||[]).map(o => Object.assign({ queued:true, id:o.clientId }, o))];
+  const pend = pendAll.map(o => `
     <tr>
-      <td>${fmtDateTime(o.ts)}</td><td><b>${o.side==='buy'?'Koop':'Verkoop'}</b></td><td>${escapeHtml(o.name)}</td>
+      <td>${fmtDateTime(o.ts)}<br><span class="small muted">${o.queued ? '⏳ Nog niet verstuurd (geen internet)' : (ONLINE ? 'Bij de server, wacht op verse koers' : 'Wacht op beursopening')}</span></td><td><b>${o.side==='buy'?'Koop':'Verkoop'}</b></td><td>${escapeHtml(o.name)}</td>
       <td class="num">${o.qty}</td><td class="num">${fmtEUR(o.estPrice)}</td>
       <td class="num">${o.side==='buy' ? fmtEUR(o.reserve) : o.qty + ' st.'}</td>
       <td class="num"><button class="btn danger small" data-cancel="${o.id}">Annuleren</button></td>
@@ -891,10 +1007,10 @@ function renderPortfolio(){
     </table></div>
   </div>
 
-  ${S.pending.length ? `
+  ${pendAll.length ? `
   <div class="card" style="margin-top:12px">
     <h2>Lopende orders ${infoBtn('pending')}</h2>
-    <p class="small muted" style="margin-top:-6px">Worden automatisch uitgevoerd als Euronext Amsterdam opent (koersen ververst na ${String(9 + Math.floor(PENDING_EXEC_DELAY_MIN/60)).padStart(2,'0')}:${String(PENDING_EXEC_DELAY_MIN%60).padStart(2,'0')}).</p>
+    <p class="small muted" style="margin-top:-6px">${ONLINE ? `De server voert je order uit tegen de eerste koers die <b>na</b> het inleggen tot stand komt (tijdens beurstijd meestal binnen ${MAX_WAIT_MIN} minuten). Zo handelt iedereen eerlijk.` : `Worden automatisch uitgevoerd als Euronext Amsterdam opent (koersen ververst na ${String(9 + Math.floor(PENDING_EXEC_DELAY_MIN/60)).padStart(2,'0')}:${String(PENDING_EXEC_DELAY_MIN%60).padStart(2,'0')}).`}</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Ingelegd</th><th>Type</th><th>Aandeel</th><th class="num">Aantal</th><th class="num">Laatste koers</th><th class="num">Geblokkeerd</th><th></th></tr></thead>
       <tbody>${pend}</tbody>
@@ -1067,13 +1183,25 @@ function renderExport(){
     </div>
   </div>
   <div class="card" style="margin-top:12px">
+    ${ONLINE ? `
+    <h2>🔒 Je account (veilig opgeslagen)</h2>
+    <p class="small muted" style="margin-top:-4px">Al je orders en transacties staan op de server van je docent. Niemand kan ze wijzigen, en je raakt ze niet kwijt. Nieuwe iPad of app verwijderd? Herstel je account met deze gegevens:</p>
+    <div class="kv" style="margin:8px 0 12px">
+      <div>Speler-ID</div><div>${escapeHtml(S.player.id)}</div>
+      <div>Herstelcode</div><div>${escapeHtml(S.player.code || '')}</div>
+    </div>
+    <p class="small">📸 Maak een screenshot of schrijf deze gegevens op. Je docent heeft ze ook.</p>
+    <div class="btn-row">
+      <button class="btn" data-act="backup">Extra kopie opslaan (.json)</button>
+      <button class="btn" data-act="restore">Ander account herstellen</button>
+    </div>` : `
     <h2>💾 Back-up & herstel</h2>
     <p class="small muted" style="margin-top:-4px">Bewaar je voortgang regelmatig als back-up (bijv. in Bestanden of via AirDrop naar jezelf). Nieuwe iPad of app per ongeluk verwijderd? Dan zet je met het back-upbestand alles terug.</p>
     <div class="btn-row">
       <button class="btn" data-act="backup">Back-up opslaan (.json)</button>
       <button class="btn" data-act="import">Back-up terugzetten</button>
-    </div>
-    <p class="small muted" style="margin-top:12px">Speler-ID: <b>${escapeHtml(S.player.id)}</b> · Start: ${fmtKey(S.player.startDate)} · App-versie 1.0</p>
+    </div>`}
+    <p class="small muted" style="margin-top:12px">Speler-ID: <b>${escapeHtml(S.player.id)}</b> · Start: ${fmtKey(S.player.startDate)} · ${ONLINE ? 'Servermodus' : 'Lokale modus'} · App-versie 2.0</p>
   </div>`;
 }
 
@@ -1100,6 +1228,7 @@ const actions = {
   reportFinal: () => openReport('final'),
   backup: () => shareFile(new Blob([JSON.stringify({ app:'AEX Beleggingsgame', exported:new Date().toISOString(), state:S }, null, 2)], { type:'application/json' }), `AEX_Backup_${safeName()}_${ams().key}.json`, 'AEX back-up'),
   import: () => $('#importFile').click(),
+  restore: () => restoreDialog(),
   hideInstall: () => { localStorage.setItem('aexHideInstall','1'); render(); }
 };
 
@@ -1145,7 +1274,7 @@ function openCompany(t){
 
 /* ---------- Koop/verkoop-modal ---------- */
 function openTrade(t, side='buy'){
-  checkFreeze();
+  if (!ONLINE) checkFreeze();
   const s = stockBy(t);
   const ov = openModal(`
     <div class="modal-head">
@@ -1172,7 +1301,7 @@ function openTrade(t, side='buy'){
   const maxQty = () => {
     if (curSide === 'sell') return Math.max(0, (S.positions[t]?.qty || 0) - pendingSellQty(t));
     const ms = marketState();
-    const willPend = STRICT_EURONEXT_HOURS && !ms.open;
+    const willPend = ONLINE || (STRICT_EURONEXT_HOURS && !ms.open);
     const pr = price() * (willPend ? 1 + PENDING_RESERVE_BUFFER : 1);
     let q = Math.floor(freeCash() / pr);
     while (q > 0 && round2(q*pr) + costFor(q*pr) > freeCash()) q--;
@@ -1180,11 +1309,14 @@ function openTrade(t, side='buy'){
   };
   function update(){
     const ms = marketState();
-    const willPend = STRICT_EURONEXT_HOURS && !ms.open;
+    const willPend = ONLINE || (STRICT_EURONEXT_HOURS && !ms.open);
     ov.querySelectorAll('[data-side]').forEach(b => b.className = b.dataset.side === curSide ? (curSide==='buy'?'on-buy':'on-sell') : '');
     const pr = price();
     $('#tPrice', ov).innerHTML = `${fmtEUR(pr)} <span class="${cls(S.prices[t]?.changePct||0)}">${fmtPct(S.prices[t]?.changePct||0)}</span>`;
-    $('#tMarket', ov).innerHTML = ms.open ? `<div class="banner ok"><div class="grow">Beurs open: je order wordt <b>direct uitgevoerd</b> tegen de actuele koers.</div></div>`
+    $('#tMarket', ov).innerHTML = ONLINE ? (ms.open
+        ? `<div class="banner info"><div class="grow">Je order gaat naar de server en wordt uitgevoerd tegen de <b>eerstvolgende actuele koers</b> (meestal binnen ${MAX_WAIT_MIN} min). Het bedrag hieronder is een indicatie.</div></div>`
+        : `<div class="banner warn"><div class="grow">Beurs gesloten (${ms.detail}). Je order wordt uitgevoerd tegen een nieuwe koers nadat de beurs opent. De koers kan dan anders zijn!</div></div>`)
+      : ms.open ? `<div class="banner ok"><div class="grow">Beurs open: je order wordt <b>direct uitgevoerd</b> tegen de actuele koers.</div></div>`
       : willPend ? `<div class="banner warn"><div class="grow">Beurs gesloten (${ms.detail}). Je order wordt een <b>lopende order</b> en wordt uitgevoerd tegen de nieuwe koers zodra de beurs opent. De koers kan dan anders zijn!</div></div>`
       : `<div class="banner warn"><div class="grow">Beurs gesloten – je order wordt direct uitgevoerd tegen de laatste slotkoers.</div></div>`;
     let q = parseInt(qtyEl.value, 10); if (!isFinite(q)) q = 0;
@@ -1211,7 +1343,7 @@ function openTrade(t, side='buy'){
     const btn = $('#tConfirm', ov);
     btn.disabled = !!err || !okMot;
     btn.className = 'btn block ' + (curSide === 'buy' ? 'buy' : 'sell');
-    btn.textContent = (willPend ? 'Lopende order inleggen: ' : 'Bevestig ') + (curSide === 'buy' ? `koop ${q > 0 ? q : ''} ${s.name}` : `verkoop ${q > 0 ? q : ''} ${s.name}`);
+    btn.textContent = (ONLINE ? 'Order inleggen: ' : willPend ? 'Lopende order inleggen: ' : 'Bevestig ') + (curSide === 'buy' ? `koop ${q > 0 ? q : ''} ${s.name}` : `verkoop ${q > 0 ? q : ''} ${s.name}`);
   }
   ov.querySelectorAll('[data-side]').forEach(b => b.onclick = () => { curSide = b.dataset.side; if (curSide==='sell' && +qtyEl.value > maxQty()) qtyEl.value = Math.max(1, maxQty()); update(); });
   ov.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { const v = Math.max(1, (parseInt(qtyEl.value,10)||0) + Number(b.dataset.q)); qtyEl.value = v; update(); });
@@ -1227,6 +1359,19 @@ function confirmTrade(t, side, qty, motivation){
   const s = stockBy(t);
   const ms = marketState();
   const price = priceOf(t);
+  if (ONLINE){
+    const value = qty * price;
+    const reserve = side === 'buy' ? round2(value * (1 + PENDING_RESERVE_BUFFER) + costFor(value * (1 + PENDING_RESERVE_BUFFER))) : 0;
+    S.outbox = S.outbox || [];
+    S.outbox.push({ clientId:'C-' + uid(), ts:new Date().toISOString(), side, ticker:t, name:s.name, qty, motivation, estPrice:price, reserve });
+    save(); render();
+    flushOutbox().then(sent => {
+      updateSnapshot(); save(); render();
+      if (sent) showMessage('Order ontvangen ✅', `<p>Je ${side==='buy'?'kooporder':'verkooporder'} voor <b>${qty}× ${escapeHtml(s.name)}</b> is veilig opgeslagen op de server.</p><p>${ms.open ? `Hij wordt uitgevoerd tegen de eerstvolgende actuele koers, meestal binnen ${MAX_WAIT_MIN} minuten.` : `De beurs is gesloten (${ms.detail}). Hij wordt uitgevoerd nadat de beurs opent.`} Tot die tijd kun je hem annuleren in je Portefeuille.</p>`);
+      else showMessage('Geen internet', `<p>Je order voor <b>${qty}× ${escapeHtml(s.name)}</b> is op je iPad bewaard en wordt <b>automatisch verstuurd</b> zodra er weer internet is.</p>`);
+    }).catch(e => { if (e && e.auth) restoreDialog(); });
+    return;
+  }
   if (!ms.open && STRICT_EURONEXT_HOURS){
     const value = qty * price;
     const reserve = side === 'buy' ? round2(value * (1 + PENDING_RESERVE_BUFFER) + costFor(value * (1 + PENDING_RESERVE_BUFFER))) : 0;
@@ -1251,11 +1396,18 @@ function confirmTrade(t, side, qty, motivation){
   toast((note ? note + ': ' : '') + `${tx.type} ${qty}× ${s.name} à ${fmtEUR(price)} uitgevoerd`);
 }
 function cancelPending(id){
-  const o = S.pending.find(x => x.id === id); if (!o) return;
+  const o = S.pending.find(x => x.id === id) || (S.outbox||[]).filter(x => x.clientId === id).map(x => Object.assign({ queued:true, id:x.clientId }, x))[0]; if (!o) return;
   const ov = openModal(`<div class="modal-head"><h2>Order annuleren?</h2><button class="close-x" data-close>×</button></div>
     <p>${o.side==='buy'?'Kooporder':'Verkooporder'} ${o.qty}× ${escapeHtml(o.name)} annuleren?${o.side==='buy' ? ` Het geblokkeerde bedrag (${fmtEUR(o.reserve)}) komt weer vrij.` : ''}</p>
     <div class="btn-row"><button class="btn" data-close style="flex:1">Nee</button><button class="btn sell" id="cYes" style="flex:1">Ja, annuleren</button></div>`);
-  $('#cYes', ov).onclick = () => { S.pending = S.pending.filter(x => x.id !== id); save(); closeModal(ov); render(); toast('Order geannuleerd'); };
+  $('#cYes', ov).onclick = async () => {
+    if (o.queued){ S.outbox = S.outbox.filter(x => x.clientId !== id); }
+    else if (ONLINE){
+      try { const d = await api({ action:'cancel', id:S.player.id, token:S.player.token, orderId:id }); applyServer(d); }
+      catch(e){ closeModal(ov); return showMessage('Annuleren mislukt', `<p>${escapeHtml(e.server ? e.message : 'Geen verbinding met de server.')}</p>`); }
+    } else { S.pending = S.pending.filter(x => x.id !== id); }
+    updateSnapshot(); save(); closeModal(ov); render(); toast('Order geannuleerd');
+  };
 }
 
 /* =====================================================================
@@ -1493,12 +1645,25 @@ function onboarding(){
     <label class="f" for="obKlas">Klas</label><input class="f" id="obKlas" placeholder="bijv. 4H2" autocapitalize="characters">
     <div class="err" id="obErr"></div>
     <button class="btn primary block" id="obGo" style="margin-top:8px">Start het spel</button>
-    <p class="small muted" style="margin-top:12px">Al eerder gespeeld op een ander apparaat? <button class="btn ghost small" id="obImport" style="min-height:44px;padding:0 6px;color:var(--accent)">Zet een back-up terug</button></p>
+    <p class="small muted" style="margin-top:12px">Al eerder gespeeld op een ander apparaat? <button class="btn ghost small" id="obImport" style="min-height:44px;padding:0 6px;color:var(--accent)">${ONLINE ? 'Herstel je account' : 'Zet een back-up terug'}</button></p>
   `, { locked:true });
-  $('#obImport', ov).onclick = () => { closeModal(ov); $('#importFile').click(); setTimeout(() => { if (!S.player) onboarding(); }, 60000); };
-  $('#obGo', ov).onclick = () => {
+  $('#obImport', ov).onclick = () => { closeModal(ov); if (ONLINE) return restoreDialog(); $('#importFile').click(); setTimeout(() => { if (!S.player) onboarding(); }, 60000); };
+  $('#obGo', ov).onclick = async () => {
     const first = $('#obFirst', ov).value.trim(), last = $('#obLast', ov).value.trim(), klas = $('#obKlas', ov).value.trim().toUpperCase();
     if (!first || !last || !klas) { $('#obErr', ov).textContent = 'Vul je voornaam, achternaam en klas in.'; return; }
+    if (ONLINE){
+      const btn = $('#obGo', ov); btn.disabled = true; btn.textContent = 'Account aanmaken…';
+      try {
+        const d = await api({ action:'register', first, last, klas });
+        S = defaultState(); S.seenNotices = [];
+        applyServer(d); S.source = 'live'; S.lastUpdate = new Date().toISOString(); updateSnapshot(); save();
+        closeModal(ov); render();
+        showMessage('Je account is aangemaakt 🎉', `<p>Bewaar deze gegevens goed (maak een screenshot). Hiermee herstel je je account als je iPad kwijt is of de app verwijderd wordt:</p>
+          <div class="calc"><div class="row"><span>Speler-ID</span><b>${escapeHtml(S.player.id)}</b></div><div class="row"><span>Herstelcode</span><b>${escapeHtml(S.player.code)}</b></div></div>
+          <p class="small muted">Je vindt ze ook altijd terug onder <b>Inleveren</b>. Je docent heeft ze ook.</p>`);
+      } catch(e){ $('#obErr', ov).textContent = e.server ? e.message : 'Geen verbinding met de server. Controleer je internet en probeer opnieuw.'; btn.disabled = false; btn.textContent = 'Start het spel'; }
+      return;
+    }
     S = defaultState();
     S.player = { id:genPlayerId(), first, last, klas, startDate: FIXED_START_DATE || ams().key, createdAt:new Date().toISOString() };
     save(); closeModal(ov); render(); refreshPrices();
@@ -1527,6 +1692,11 @@ function tick(){
   const now = Date.now();
   const last = S.lastUpdate ? new Date(S.lastUpdate).getTime() : 0;
   const ms = marketState();
+  if (ONLINE){
+    const busy = S.pending.length || (S.outbox||[]).length;
+    if (now - last >= (busy ? PENDING_REFRESH_MIN : REFRESH_INTERVAL_MIN) * 60000) refreshPrices();
+    return;
+  }
   const needPending = S.pending.length && pendingExecutableNow() && (!S.lastRefreshWasOpen || ams(new Date(last)).key !== ms.key || ams(new Date(last)).min < OPEN_MIN + (DATA_ENDPOINT_URL ? PENDING_EXEC_DELAY_MIN : 0));
   if (now - last >= REFRESH_INTERVAL_MIN * 60000 || needPending) refreshPrices();
   else { const before = !!S.frozen; checkFreeze(); if (!before && S.frozen) render(); }
@@ -1538,6 +1708,7 @@ function init(){
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => { currentTab = b.dataset.tab; render(); window.scrollTo(0,0); });
   $('#refreshBtn').onclick = () => refreshPrices(true);
+  if (ONLINE && S.player && !S.player.token){ S = defaultState(); save(); }  // oude lokale gegevens: opnieuw beginnen of herstellen
   render();
   if (!S.player) onboarding();
   else refreshPrices();
