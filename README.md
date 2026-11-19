@@ -33,12 +33,7 @@ Echte realtime koersen kan alleen met een betaalde data-API:
 
 **Mijn advies:** gebruik de gratis Google-koppeling. Voor een PO van 30 dagen maakt 15 tot 20 minuten vertraging didactisch niets uit. Wat telt is dat **iedereen tegen dezelfde koersen handelt** en dat de motivatie centraal staat. Betaalde realtime data kost geld en brengt licentie- en privacyvragen mee. Daarmee win je geen leerdoel.
 
-**Het enige echte risico van vertraging** is valsspelen. Een slimme leerling ziet op een beursapp dat ASML de afgelopen 10 minuten 3% is gestegen en koopt snel in de game tegen de "oude" koers. Twee maatregelen zitten al in de app:
-
-- Lopende orders (ingelegd buiten beurstijd) worden pas **20 minuten na opening** uitgevoerd (`PENDING_EXEC_DELAY_MIN = 20`). Op dat moment heeft de gratis koers de opening bijgewerkt.
-- Alle orders staan met tijd en motivatie in het logboek, zodat je verdacht snelle winsten kunt terugzien.
-
-Wil je dit helemaal dichttimmeren, dan is de beste aanvulling: **orders altijd uitvoeren tegen de eerstvolgende koers na het inleggen**, dus nooit tegen de koers die al op het scherm stond. Dat kan ik als optie inbouwen.
+**Het enige echte risico van vertraging** is valsspelen. Een slimme leerling ziet op een beursapp dat ASML de afgelopen 10 minuten 3% is gestegen en koopt snel in de game tegen de "oude" koers. **Dat is in servermodus opgelost:** de server voert een order pas uit tegen een koers die ná het inleggen tot stand kwam (zie hoofdstuk 3).
 
 ---
 
@@ -126,9 +121,9 @@ Alles valt binnen de gratis limieten van Google. Een gewoon Gmail-account kan da
 **Technisch / organisatorisch**
 
 6. **Klassenoverzicht**: dit zit nu in de server (zie hoofdstuk 3).
-7. **Back-ups**: laat leerlingen elke week naast de CSV ook een back-up (.json) maken. Safari kan websitegegevens wissen als een site lang niet gebruikt is. Voor apps op het beginscherm geldt dat in de praktijk niet, maar een back-up is een goede verzekering.
+7. **Back-ups**: in servermodus staat alles op de server en herstellen gaat met de herstelcode. Laat leerlingen die code wel bewaren (screenshot). Download zelf af en toe een kopie van de spreadsheet (Bestand > Downloaden > .xlsx) als extra zekerheid.
 8. **Privacy (AVG)**: in servermodus komen naam, klas en transacties van leerlingen in jouw Google Sheet. Gebruik bij voorkeur een Google-account van school, en stem dit kort af met je privacyfunctionaris. Er staan geen leerlinggegevens op GitHub.
-9. **Test de koppeling vóór de start.** Gaat de klas eerst in simulatiemodus van start en zet je later de koppeling aan, dan springen de koersen van simulatie naar echt. Dat geeft scheve resultaten.
+9. **Zet de server aan vóór de start.** Wat leerlingen in simulatiemodus doen, wordt niet meegenomen. Als de server aanstaat, begint iedereen opnieuw met een echt account.
 
 ## Bronnen samenstelling AEX
 
