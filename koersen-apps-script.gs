@@ -88,6 +88,10 @@ function setup() {
   sh.clear();
   sh.getRange(1, 1, 1, 7).setValues([['App-ticker','Google-code','Koers','Slot gisteren','Verandering %','Tijd koers','Vertraging (min)']]).setFontWeight('bold');
   const rows = [INDEX].concat(TICKERS.map(t => [t[0], t[1]]));
+  // Formules met komma's werken niet in een Nederlandse Sheet: tijdelijk Engelse landinstelling gebruiken.
+  const oldLocale = ss.getSpreadsheetLocale();
+  ss.setSpreadsheetLocale('en_US');
+  SpreadsheetApp.flush();
   rows.forEach((r, i) => {
     const row = i + 2;
     sh.getRange(row, 1, 1, 2).setValues([[r[0], r[1]]]);
@@ -101,6 +105,8 @@ function setup() {
   });
   sh.getRange(2, 6, rows.length, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
   sh.setFrozenRows(1);
+  SpreadsheetApp.flush();
+  if (oldLocale && oldLocale !== 'en_US') ss.setSpreadsheetLocale(oldLocale);   // weer terug naar Nederlands
   // Overige tabbladen (bestaande gegevens blijven staan!)
   ['P','O','T','S','E'].forEach(k => {
     let s = ss.getSheetByName(SH[k]);
